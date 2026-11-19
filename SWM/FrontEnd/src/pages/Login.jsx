@@ -167,163 +167,163 @@ const Login = () => {
 
   return (
     <Layout>
-      <div className="flex md:flex-row flex-col justify-center items-center bg-zinc-100 p-4">
-        <motion.div
-          className="flex justify-center mb-8 md:mb-0 w-full md:w-1/3"
-          initial={{ opacity: 0, x: -100 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <img
-            src={BannerImg}
-            alt="Login Banner"
-            className="w-3/4 md:w-full h-400"
-          />
-        </motion.div>
-        <motion.div
-          className="bg-white shadow-lg p-8 w-full md:w-1/2 max-w-md h-400"
-          initial={{ opacity: 0, x: 100 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <form className="flex flex-col gap-4" onSubmit={handleLogin}>
-            <div>
-              <h1 className="font-bold text-3xl text-center">Login</h1>
-            </div>
+      <section className="bg-slate-100 px-4 py-8 sm:py-12">
+        <div className="mx-auto grid max-w-5xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl md:grid-cols-2">
+          <motion.div
+            className="relative hidden bg-slate-900 md:block"
+            initial={{ opacity: 0, x: -100 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <img
+              src={BannerImg}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          </motion.div>
+          <motion.div
+            className="p-6 sm:p-10"
+            initial={{ opacity: 0, x: 100 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <h1 className="mb-6 text-3xl font-bold text-slate-900">Sign in</h1>
+            <form className="flex flex-col gap-4" onSubmit={handleLogin}>
 
-            <div className="flex justify-center gap-4">
-              <label>
-                <input
-                  type="radio"
-                  name="radioButton"
-                  value="Email"
-                  checked={useEmail}
-                  onChange={toggleInputMethodRadio}
-                  className="mr-1"
-                />
-                Email
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="radioButton"
-                  value="UserName"
-                  checked={!useEmail}
-                  onChange={toggleInputMethodRadio}
-                  className="mr-1"
-                />
-                Username
-              </label>
-            </div>
-            {useEmail ? (
-              <div>
-                <label
-                  htmlFor="Email"
-                  className="block font-medium text-zinc-700 text-sm"
-                >
-                  Email
+              <div className="flex justify-center gap-4">
+                <label>
                   <input
-                    type="text"
-                    id="email"
-                    name="email"
-                    required
-                    className="block shadow-sm px-3 py-2 border border-zinc-300 focus:border-primary rounded-md focus:outline-none focus:ring-primary w-full sm:text-sm"
-                    value={formData.email}
-                    onChange={handleInputChange}
+                    type="radio"
+                    name="radioButton"
+                    value="Email"
+                    checked={useEmail}
+                    onChange={toggleInputMethodRadio}
+                    className="mr-1"
                   />
+                  Email
                 </label>
-                {errors.email && <p className="text-red-500">{errors.email}</p>}
+                <label>
+                  <input
+                    type="radio"
+                    name="radioButton"
+                    value="UserName"
+                    checked={!useEmail}
+                    onChange={toggleInputMethodRadio}
+                    className="mr-1"
+                  />
+                  Username
+                </label>
               </div>
-            ) : (
+              {useEmail ? (
+                <div>
+                  <label
+                    htmlFor="email"
+                    className="block font-medium text-zinc-700 text-sm"
+                  >
+                    Email
+                    <input
+                      type="text"
+                      id="email"
+                      name="email"
+                      required
+                      className="block shadow-sm px-3 py-2 border border-zinc-300 focus:border-primary rounded-md focus:outline-none focus:ring-primary w-full sm:text-sm"
+                      value={formData.email}
+                      onChange={handleInputChange}
+                    />
+                  </label>
+                  {errors.email && <p className="text-red-500">{errors.email}</p>}
+                </div>
+              ) : (
+                <div>
+                  <label
+                    htmlFor="userName"
+                    className="block font-medium text-zinc-700 text-sm"
+                  >
+                    Username
+                    <input
+                      type="text"
+                      id="userName"
+                      name="userName"
+                      required
+                      className="block shadow-sm px-3 py-2 border border-zinc-300 focus:border-primary rounded-md focus:outline-none focus:ring-primary w-full sm:text-sm"
+                      value={formData.userName}
+                      onChange={handleInputChange}
+                    />{" "}
+                  </label>
+                  {errors.userName && (
+                    <p className="text-red-500">{errors.userName}</p>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label
-                  htmlFor="userName"
+                  htmlFor="password"
                   className="block font-medium text-zinc-700 text-sm"
                 >
-                  Username
-                  <input
-                    type="text"
-                    id="userName"
-                    name="userName"
-                    required
-                    className="block shadow-sm px-3 py-2 border border-zinc-300 focus:border-primary rounded-md focus:outline-none focus:ring-primary w-full sm:text-sm"
-                    value={formData.userName}
-                    onChange={handleInputChange}
-                  />{" "}
+                  Password
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      id="password"
+                      name="password"
+                      required
+                      className="block shadow-sm px-3 py-2 border border-zinc-300 focus:border-primary rounded-md focus:outline-none focus:ring-primary w-full sm:text-sm"
+                      value={formData.password}
+                      onChange={handleInputChange}
+                    />
+                    <div
+                      className="right-0 absolute inset-y-0 flex items-center pr-3 cursor-pointer"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <AiFillEyeInvisible /> : <AiFillEye />}
+                    </div>
+                  </div>
                 </label>
-                {errors.userName && (
-                  <p className="text-red-500">{errors.userName}</p>
+                {errors.password && (
+                  <p className="text-red-500">{errors.password}</p>
                 )}
               </div>
-            )}
 
-            <div>
-              <label
-                htmlFor="password"
-                className="block font-medium text-zinc-700 text-sm"
-              >
-                Password
-                <div className="relative">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center">
                   <input
-                    type={showPassword ? "text" : "password"}
-                    id="password"
-                    name="password"
-                    required
-                    className="block shadow-sm px-3 py-2 border border-zinc-300 focus:border-primary rounded-md focus:outline-none focus:ring-primary w-full sm:text-sm"
-                    value={formData.password}
-                    onChange={handleInputChange}
+                    id="remember_me"
+                    name="remember_me"
+                    type="checkbox"
+                    className="border-zinc-300 rounded focus:ring-primary w-4 h-4 text-primary"
                   />
-                  <div
-                    className="right-0 absolute inset-y-0 flex items-center pr-3 cursor-pointer"
-                    onClick={() => setShowPassword(!showPassword)}
+                  <label
+                    htmlFor="remember_me"
+                    className="block ml-2 text-zinc-900 text-sm"
                   >
-                    {showPassword ? <AiFillEyeInvisible /> : <AiFillEye />}
-                  </div>
+                    Remember me
+                  </label>
                 </div>
-              </label>
-              {errors.password && (
-                <p className="text-red-500">{errors.password}</p>
-              )}
-            </div>
-
-            <div className="flex justify-between items-center">
-              <div className="flex items-center">
-                <input
-                  id="remember_me"
-                  name="remember_me"
-                  type="checkbox"
-                  className="border-zinc-300 rounded focus:ring-primary w-4 h-4 text-primary"
-                />
-                <label
-                  htmlFor="remember_me"
-                  className="block ml-2 text-zinc-900 text-sm"
-                >
-                  Remember me
-                </label>
+                <div className="text-sm">
+                  <button
+                    type="button"
+                    onClick={() => setShowOtpModal(true)}
+                    className="font-semibold text-primary hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
               </div>
-              <div className="text-sm">
-                <a
-                  href="#"
-                  onClick={() => setShowOtpModal(true)}
-                  className="font-medium text-primary hover:text-black-foreground"
+              <div>
+                <button
+                  type="submit"
+                  className="flex justify-center items-center bg-primary hover:bg-primary/80 shadow-sm px-4 py-2 border border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 w-full font-medium text-white text-sm"
+                  disabled={isLoading}
                 >
-                  Forgot password?
-                </a>
+                  {isLoading ? "Logging in..." : "Login"}
+                </button>
               </div>
-            </div>
-            <div>
-              <button
-                type="submit"
-                className="flex justify-center items-center bg-primary hover:bg-primary/80 shadow-sm px-4 py-2 border border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 w-full font-medium text-white text-sm"
-                disabled={isLoading}
-              >
-                {isLoading ? "Logging in..." : "Login"}
-              </button>
-            </div>
-          </form>
-        </motion.div>
+            </form>
+          </motion.div>
+        </div>
         {showOtpModal && <OtpModal onClose={closeModal} />}
-      </div>
+      </section>
     </Layout>
   );
 };

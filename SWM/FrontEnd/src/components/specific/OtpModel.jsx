@@ -15,22 +15,29 @@ const OtpModal = ({ onClose  }) => {
 
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-gray-800 bg-opacity-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
       <motion.div
-        className="relative  bg-white w-1/4 p-6 rounded shadow-lg"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="password-recovery-title"
+        className="relative max-h-full w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-xl sm:p-8"
         initial="hidden"
         animate="visible"
         exit="hidden"
         variants={modalVariants}
         transition={{ duration: 0.5 }}
       >
-        {/* Close button */}
         <button
+          type="button"
           onClick={onClose}
-          className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-xl font-bold"
+          aria-label="Close password recovery"
+          className="absolute right-3 top-3 h-10 w-10 rounded-lg text-xl text-slate-600 hover:bg-slate-100"
         >
           ×
         </button>
+        <h2 id="password-recovery-title" className="mb-4 pr-10 text-xl font-semibold">
+          {otpRequested ? "Reset your password" : "Forgot your password?"}
+        </h2>
         {otpRequested ? (
           <ResetPasswordForm email={email} />
         ) : (
