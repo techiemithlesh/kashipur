@@ -29,9 +29,9 @@ trait ConsumerTrait
 
     public function consumerMetaDataList(){
         return Consumer::from("consumers as app")  
-                ->join("category_type_masters as ctm", "ctm.id", "app.category_type_master_id")
-                ->join("sub_category_type_masters as sctm", "sctm.id", "app.sub_category_type_master_id")
-                ->join(DB::raw("(
+                ->leftJoin("category_type_masters as ctm", "ctm.id", "app.category_type_master_id")
+                ->leftJoin("sub_category_type_masters as sctm", "sctm.id", "app.sub_category_type_master_id")
+                ->leftJoin(DB::raw("(
                     SELECT consumer_id,
                         STRING_AGG(owner_name, ',') AS owner_name,
                         STRING_AGG(guardian_name, ',') AS guardian_name,
