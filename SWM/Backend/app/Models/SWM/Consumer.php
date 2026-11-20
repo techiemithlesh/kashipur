@@ -11,6 +11,7 @@ class Consumer extends ParamModel
     use HasFactory;
     protected $fillable = [
         "consumer_no",
+        "gis_id",
         "rf_id",
         "rf_id_install_by",
         "rf_id_install_date",

@@ -184,6 +184,8 @@ export const swmFeedbackLockUnlockApi = `${BASE_URL}/api/swm/feedback/mstr-lock-
 
 // swm
 export const swmMasterDataApi = `${BASE_URL}/api/swm/get-master-data`;
+export const swmConsumerImportPreviewApi = `${BASE_URL}/api/swm/consumer-import/preview`;
+export const swmConsumerImportCommitApi = `${BASE_URL}/api/swm/consumer-import/commit`;
 export const validateHoldingNoApi = `${BASE_URL}/api/swm/validate-holding`;
 export const swmAddConsumerTestRequestApi=`${BASE_URL}/api/swm/test-request`;
 export const swmAddConsumerApi=`${BASE_URL}/api/swm/consumer-add`;

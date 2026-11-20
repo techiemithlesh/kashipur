@@ -423,7 +423,7 @@ class ReportController extends Controller
                     COALESCE(penalty_rebate.penalty,0) as penalty
                 "))
                 ->join("ulb_ward_masters as wm","wm.id","c.ward_mstr_id")
-                ->join("category_type_masters as ct","ct.id","c.category_type_master_id")                
+                ->leftJoin("category_type_masters as ct","ct.id","c.category_type_master_id")                
                 ->leftJoin(DB::raw("(
                         select consumer_id,string_agg(owner_name,',') as owner_name , string_agg(guardian_name,',') as guardian_name, string_agg(cast(mobile_no as text),',') as mobile_no,
                         string_agg(email,',') as email

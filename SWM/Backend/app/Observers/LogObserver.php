@@ -38,7 +38,9 @@ class LogObserver
     ];
 
     public function created($model)
-    {
+    {   if(optional(Request::route())->getName()=="swm.consumer-import-commit"){
+            return;
+        }
         $this->logChanges($model, 'created');
     }
 

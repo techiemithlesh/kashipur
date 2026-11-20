@@ -46,6 +46,8 @@ Route::middleware(['auth:sanctum',"expireBearerToken","setUlb"])->group(function
         Route::post("review-tax","reviewTax")->withoutMiddleware(['auth:sanctum']);
         Route::post("test-request","testAddRequest");
         Route::post("consumer-add","addConsumer");
+        Route::post("consumer-import/preview", "previewConsumerImport");
+        Route::post("consumer-import/commit", "commitConsumerImport")->name("consumer-import-commit");
         Route::post("consumer-edit-basic","editConsumer");
         Route::post("consumer-edit-owner","editOwners");
         Route::post("consumer-edit-range","editConsumerRange");

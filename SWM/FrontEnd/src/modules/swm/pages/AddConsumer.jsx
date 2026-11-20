@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { FaPlus, FaTrash } from "react-icons/fa";
 import FormCard from "../../../components/common/FormCard";
@@ -732,6 +732,9 @@ function AddConsumer({ mstrData, formDetails }) {
             onSubmit={handleSubmit}
             className="flex flex-col gap-6 text-gray-700 text-lg"
         >
+            <Link to="/swm/consumer-import" className="self-end text-sm font-semibold text-primary hover:underline">
+                Import consumers from Excel or CSV
+            </Link>
             {Object.keys(validationError).length > 0 && (
                 <div className="bg-red-100 px-4 py-3 border border-red-400 rounded text-red-700">
                     <h4 className="font-bold">Validation Errors:</h4>

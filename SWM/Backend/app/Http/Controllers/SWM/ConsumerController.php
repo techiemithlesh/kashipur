@@ -4,6 +4,7 @@ namespace App\Http\Controllers\SWM;
 
 use App\Bll\SWM\ConsumerDemandGenerateBll;
 use App\Bll\SWM\ConsumerDueBll;
+use App\Bll\SWM\ConsumerImportBll;
 use App\Bll\SWM\ConsumerPaymentBll;
 use App\Bll\SWM\DemandReceiptBll;
 use App\Bll\SWM\PaymentReceiptBll;
@@ -181,6 +182,16 @@ class ConsumerController extends Controller
 
     public function testAddRequest(AddConsumerRequest $request){
         return responseMsg(true,"Valid Request",""); 
+    }
+
+    public function previewConsumerImport(Request $request)
+    {
+        return (new ConsumerImportBll())->process($request, false);
+    }
+
+    public function commitConsumerImport(Request $request)
+    {
+        return (new ConsumerImportBll())->process($request, true);
     }
 
     public function addConsumer(AddConsumerRequest $request){

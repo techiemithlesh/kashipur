@@ -3,6 +3,7 @@ import AdminLayout from "../../layout/AdminLayout";
 import { Route, Routes } from "react-router-dom";
 import ProtectedRoute from "../../components/common/ProtectedRoute";
 import AddConsumer from "./pages/AddConsumer";
+import ImportConsumers from "./pages/ImportConsumers";
 import CategoryList from "./pages/CategoryList";
 import SubCategoryList from "./pages/SubCategoryList";
 import SearchConsumer from "./pages/SearchConsumer";
@@ -72,6 +73,10 @@ function index() {
               }
             />
             
+            <Route
+              path="/consumer-import"
+              element={<ProtectedRoute><ImportConsumers /></ProtectedRoute>}
+            />
             <Route
               path="/search"
               element={
