@@ -81,6 +81,141 @@ function CameraFeed({ camera }) {
   return <div className="flex h-[300px] items-center justify-center bg-slate-950 p-6 text-center text-sm text-white">Unsupported stream type: {type}</div>;
 }
 
+function RecordableCameraFeed({ camera }) {
+  const feedRef = useRef(null);
+  const captureRef = useRef(null);
+  const recorderRef = useRef(null);
+  const [recordingState, setRecordingState] = useState("idle");
+  const [recordingMessage, setRecordingMessage] = useState("");
+  const [recordingTime, setRecordingTime] = useState(null);
+
+  const stopRecording = () => {
+    const recorder = recorderRef.current;
+    if (recorder && recorder.state !== "inactive") recorder.stop();
+  };
+
+  useEffect(() => () => {
+    stopRecording();
+    captureRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  const startRecording = async () => {
+    const feed = feedRef.current;
+    setRecordingMessage("");
+    if (!navigator.mediaDevices?.getDisplayMedia || !window.CropTarget ||
+        !window.MediaRecorder?.isTypeSupported("video/webm")) {
+      setRecordingMessage("Camera recording is unavailable in this browser. Use desktop Chrome on localhost or HTTPS.");
+      return;
+    }
+
+    setRecordingState("starting");
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: false,
+        preferCurrentTab: true,
+        surfaceSwitching: "exclude",
+      });
+      if (feedRef.current !== feed) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      captureRef.current = stream;
+      const [track] = stream.getVideoTracks();
+      if (!track?.cropTo) throw new Error("Select the current dashboard tab.");
+
+      // Start saving frames only after Chrome has cropped the capture to this feed.
+      const target = await window.CropTarget.fromElement(feed);
+      await track.cropTo(target);
+      if (feedRef.current !== feed || track.readyState === "ended") {
+        throw new Error("The camera capture ended before recording started.");
+      }
+
+      const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+      const chunks = [];
+      const cameraName = String(camera.name || "camera").replace(/[^a-z0-9_-]+/gi, "-");
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      recorder.ondataavailable = ({ data }) => {
+        if (data.size) chunks.push(data);
+      };
+      recorder.onerror = () => {
+        if (feedRef.current) setRecordingMessage("Recording ended unexpectedly. Any captured video will be downloaded.");
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((item) => item.stop());
+        captureRef.current = null;
+        recorderRef.current = null;
+        if (feedRef.current) setRecordingState("idle");
+
+        if (!chunks.length) {
+          if (feedRef.current) setRecordingMessage("No video was captured.");
+          return;
+        }
+        const url = URL.createObjectURL(new Blob(chunks, { type: "video/webm" }));
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${cameraName}-${timestamp}.webm`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+      };
+      track.addEventListener("ended", stopRecording, { once: true });
+      recorder.start(1000);
+      recorderRef.current = recorder;
+      setRecordingState("recording");
+    } catch (error) {
+      stream?.getTracks().forEach((track) => track.stop());
+      captureRef.current = null;
+      recorderRef.current = null;
+      if (!feedRef.current) return;
+      setRecordingState("idle");
+      setRecordingMessage(error.name === "NotAllowedError"
+        ? "Camera recording was cancelled or blocked."
+        : "Could not record this camera. Choose the current dashboard tab in the sharing prompt.");
+    }
+  };
+
+  const isRecording = recordingState === "recording";
+  useEffect(() => {
+    if (!isRecording) return;
+    const updateTime = () => setRecordingTime(new Date());
+    updateTime();
+    const timer = window.setInterval(updateTime, 1000);
+    return () => window.clearInterval(timer);
+  }, [isRecording]);
+
+  return (
+    <>
+      <div ref={feedRef} className="relative">
+        <CameraFeed camera={camera} />
+        {isRecording && recordingTime && (
+          <time
+            dateTime={recordingTime.toISOString()}
+            className="pointer-events-none absolute left-2 top-2 z-10 rounded bg-black/75 px-2 py-1 text-xs text-white"
+          >
+            {recordingTime.toLocaleString()} · System time
+          </time>
+        )}
+      </div>
+      {camera.streamUrl && <div className="flex flex-wrap items-center gap-3 px-3 py-3 text-xs text-white">
+        <button
+          type="button"
+          disabled={recordingState === "starting"}
+          onClick={isRecording ? stopRecording : startRecording}
+          className="rounded-lg bg-slate-700 px-3 py-2 font-semibold hover:bg-slate-600 disabled:opacity-60"
+        >
+          {isRecording ? "Stop and save" : "Start recording"}
+        </button>
+        <span role="status">
+          {recordingState === "starting" ? "Choose this dashboard tab in Chrome." : isRecording ? "Recording…" : recordingMessage}
+        </span>
+      </div>}
+    </>
+  );
+}
+
 export default function CctvMonitor() {
   const token = getToken();
   const wallRef = useRef(null);
@@ -242,7 +377,7 @@ export default function CctvMonitor() {
                 <span className="min-w-0 truncate font-semibold">{camera.name} <span className="ml-1 rounded-md bg-white/10 px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-slate-300">{camera.type}</span></span>
                 {canManage && <div className="flex shrink-0 gap-3 text-xs font-medium text-slate-300"><button type="button" className="transition hover:text-white" onClick={() => editCamera(camera)}>Edit</button><button type="button" className="transition hover:text-rose-300" onClick={() => removeCamera(camera)}>Remove</button></div>}
               </div>
-              <CameraFeed key={`${camera.id}-${refreshKey}`} camera={camera} />
+              <RecordableCameraFeed camera={camera} />
             </article>
           ))}
         </div>

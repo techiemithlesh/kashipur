@@ -2,6 +2,7 @@ import axios from "axios";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Echo from "laravel-echo";
 import Pusher from "pusher-js";
+import Select from "react-select";
 import { mapFeatureNameApi, swmConsumerLocationListApi, swmWastCollationApi, vehicleMovementLogApi } from "../../api/endpoints";
 import { getToken } from "../../utils/auth";
 import CctvMonitor from "./CctvMonitor";
@@ -13,11 +14,14 @@ const streetLabelsUrl = import.meta.env.VITE_MAP_STREET_LABELS_URL || "https://s
 const placeLabelsUrl = import.meta.env.VITE_MAP_PLACE_LABELS_URL || "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
 
 const coordinates = (latitude, longitude) => {
+  if ([latitude, longitude].some((value) => value == null || String(value).trim() === "")) {
+    return null;
+  }
   const lat = Number(latitude);
   const lng = Number(longitude);
-  return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
-    ? [lat, lng]
-    : null;
+  const isValid = Number.isFinite(lat) && Number.isFinite(lng)
+    && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+  return isValid && (lat !== 0 || lng !== 0) ? [lat, lng] : null;
 };
 
 const consumerBuildingName = (consumer) => {
@@ -32,10 +36,18 @@ const consumerBuildingName = (consumer) => {
   return [identity , area].filter(Boolean).join(" — ");
 };
 
+const consumerOption = (consumer) => ({
+  value: String(consumer.id),
+  label: consumerBuildingName(consumer) || `Consumer ${consumer.id}`,
+});
+
 function VehicleTracker() {
   const token = getToken();
+  const mapPanel = useRef(null);
   const mapElement = useRef(null);
   const map = useRef(null);
+  const hasFittedConsumers = useRef(false);
+  const framedRoute = useRef(null);
   const vehicleMarkers = useRef({});
   const vehiclePaths = useRef({});
   const tcMarkers = useRef({});
@@ -56,8 +68,38 @@ function VehicleTracker() {
   const [consumerQuery, setConsumerQuery] = useState("");
   const [areaQuery, setAreaQuery] = useState("");
   const [areaMessage, setAreaMessage] = useState("");
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenError, setFullscreenError] = useState("");
+  const [tilesUnavailable, setTilesUnavailable] = useState(false);
   const routingUrl = import.meta.env.VITE_ROUTING_URL || "https://router.project-osrm.org/route/v1/driving";
 
+  useEffect(() => {
+    const syncFullscreen = () => {
+      setIsFullscreen(document.fullscreenElement === mapPanel.current);
+    };
+    document.addEventListener("fullscreenchange", syncFullscreen);
+    return () => document.removeEventListener("fullscreenchange", syncFullscreen);
+  }, []);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      map.current?.invalidateSize({ animate: false });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isFullscreen]);
+
+  const toggleFullscreen = async () => {
+    setFullscreenError("");
+    try {
+      if (document.fullscreenElement === mapPanel.current) {
+        await document.exitFullscreen();
+      } else {
+        await mapPanel.current.requestFullscreen();
+      }
+    } catch {
+      setFullscreenError("Full screen is unavailable.");
+    }
+  };
 
   const lookupMapFeatureName = useCallback((point) => {
     const key = point.map((value) => value.toFixed(5)).join(",");
@@ -158,10 +200,29 @@ function VehicleTracker() {
     map.current = L.map(mapElement.current, { maxZoom: 18 }).setView([20.5937, 78.9629], 5);
     map.current.createPane("labelPane");
     map.current.getPane("labelPane").style.zIndex = 350;
-    L.tileLayer(mapTileUrl, {
+    const satelliteLayer = L.tileLayer(mapTileUrl, {
       attribution: mapAttribution,
       maxZoom: 18,
-    }).addTo(map.current);
+    });
+    const streetFallback = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    });
+    let hasSatelliteTile = false;
+    let hasStreetTile = false;
+    satelliteLayer.on("loading", () => { hasSatelliteTile = false; });
+    satelliteLayer.on("tileload", () => { hasSatelliteTile = true; });
+    satelliteLayer.on("load", () => {
+      // Switch layers only when the satellite tile batch has no successful tiles.
+      if (hasSatelliteTile) return;
+      satelliteLayer.remove();
+      streetFallback.addTo(map.current);
+    });
+    streetFallback.on("loading", () => { hasStreetTile = false; });
+    streetFallback.on("tileload", () => { hasStreetTile = true; });
+    streetFallback.on("load", () => setTilesUnavailable(!hasStreetTile));
+    setTilesUnavailable(false);
+    satelliteLayer.addTo(map.current);
     L.tileLayer(streetLabelsUrl, {
       attribution: "Street labels &copy; Esri",
       maxZoom: 18,
@@ -202,6 +263,9 @@ function VehicleTracker() {
       echo.current = null;
       map.current?.remove();
       map.current = null;
+      hasFittedConsumers.current = false;
+      framedRoute.current = null;
+      consumerMarkers.current = {};
     };
   }, [lookupMapFeatureName]);
 
@@ -227,16 +291,32 @@ function VehicleTracker() {
         consumers.current = consumerResponse?.data?.data || [];
         setConsumerList(consumers.current);
         drawVisits(visits.current);
+        const points = [];
+        const mappedIds = new Set();
         consumers.current.forEach((consumer) => {
           const point = coordinates(consumer.latitude, consumer.longitude);
-          if (!point || consumerMarkers.current[String(consumer.id)]) return;
-          consumerMarkers.current[String(consumer.id)] = L.circleMarker(point, {
+          if (!point) return;
+          const id = String(consumer.id);
+          points.push(point);
+          mappedIds.add(id);
+          const marker = consumerMarkers.current[id];
+          if (marker) {
+            marker.setLatLng(point);
+            return;
+          }
+          consumerMarkers.current[id] = L.circleMarker(point, {
             radius: 6, fillColor: "#f97316", color: "#fff", weight: 2, fillOpacity: 0.75,
-          }).addTo(map.current).bindPopup(consumerBuildingName(consumer));
+          }).addTo(map.current).bindPopup(consumerBuildingName(consumer), { autoPan: false });
         });
-        const points = consumers.current.map((consumer) => coordinates(consumer.latitude, consumer.longitude)).filter(Boolean);
+        Object.entries(consumerMarkers.current).forEach(([id, marker]) => {
+          if (mappedIds.has(id)) return;
+          map.current.removeLayer(marker);
+          delete consumerMarkers.current[id];
+        });
 
-        if (points.length > 0) {
+        // Frame mapped consumers once. Later refreshes update the markers in place.
+        if (!hasFittedConsumers.current && points.length > 0) {
+          hasFittedConsumers.current = true;
           const bounds = L.latLngBounds(points);
           map.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
         }
@@ -289,21 +369,29 @@ function VehicleTracker() {
     return consumerList.filter((consumer) => [
       consumer.consumerNo, consumer.consumer_no, consumer.holdingNo, consumer.holding_no,
       consumer.houseNo, consumer.house_no, consumer.streetName, consumer.street_name,
-      consumer.locality, consumer.address,
+      consumer.locality, consumer.address, consumer.ownerName, consumer.owner_name,
     ].some((value) => String(value || "").toLowerCase().includes(query)));
   }, [consumerList, consumerQuery]);
+  const isMulti = consumerSelectionMode === "multiple";
+  const consumerOptions = filteredConsumerList.slice(0, 100).map(consumerOption);
+  const selectedOptions = selectedConsumerIds.flatMap((id) => {
+    const consumer = consumerList.find((item) => String(item.id) === id);
+    return consumer ? [consumerOption(consumer)] : [];
+  });
   const destination = useMemo(() => coordinates(selectedConsumerData?.latitude, selectedConsumerData?.longitude), [selectedConsumerData]);
   const origin = useMemo(() => selectedTcData?.latest?.point, [selectedTcData]);
+  const selectedRoute = selectedTc && selectedConsumer ? `${selectedTc}:${selectedConsumer}` : null;
   const directionsUrl = destination && origin
     ? `https://www.google.com/maps/dir/?api=1&origin=${origin[0]},${origin[1]}&destination=${destination[0]},${destination[1]}&travelmode=driving`
     : null;
 
   useEffect(() => {
+    if (!selectedRoute) framedRoute.current = null;
     if (destinationRoute.current && map.current) {
       map.current.removeLayer(destinationRoute.current);
       destinationRoute.current = null;
     }
-    if (!origin || !destination || !map.current) return undefined;
+    if (!selectedRoute || !origin || !destination || !map.current) return undefined;
     let active = true;
     const routeRequest = `${routingUrl}/${origin[1]},${origin[0]};${destination[1]},${destination[0]}?overview=full&geometries=geojson`;
     fetch(routeRequest)
@@ -316,27 +404,32 @@ function VehicleTracker() {
         if (!active || !coordinatesList?.length) return;
         const points = coordinatesList.map(([longitude, latitude]) => [latitude, longitude]);
         destinationRoute.current = L.polyline(points, { color: "#f59e0b", weight: 5 }).addTo(map.current);
-        map.current.fitBounds(destinationRoute.current.getBounds(), { padding: [40, 40] });
+        // Frame the route when selected, and keep the viewport during live updates.
+        if (framedRoute.current !== selectedRoute) {
+          framedRoute.current = selectedRoute;
+          map.current.fitBounds(destinationRoute.current.getBounds(), { padding: [40, 40] });
+        }
       })
       .catch((error) => console.warn("Road route could not be loaded", error));
     return () => { active = false; };
-  }, [origin, destination, routingUrl]);
+  }, [origin, destination, routingUrl, selectedRoute]);
 
   useEffect(() => {
-    if (!map.current || !selectedConsumer) return;
-    const consumer = consumerList.find((item) => String(item.id) === String(selectedConsumer));
-    const point = coordinates(consumer?.latitude, consumer?.longitude);
-    if (point) consumerMarkers.current[String(selectedConsumer)]?.openPopup();
-  }, [selectedConsumer, consumerList]);
+    if (selectedConsumer) consumerMarkers.current[String(selectedConsumer)]?.openPopup();
+  }, [selectedConsumer]);
 
   useEffect(() => {
     const selected = new Set(selectedConsumerIds.map(String));
     Object.entries(consumerMarkers.current).forEach(([id, marker]) => {
+      const isSelected = selected.has(id);
+      marker.setRadius(isSelected ? 13 : 6);
       marker.setStyle({
-        fillColor: selected.has(id) ? "#facc15" : "#f97316",
-        color: selected.has(id) ? "#854d0e" : "#fff",
-        weight: selected.has(id) ? 3 : 2,
+        fillColor: isSelected ? "#facc15" : "#f97316",
+        fillOpacity: isSelected ? 1 : 0.75,
+        color: isSelected ? "#422006" : "#fff",
+        weight: isSelected ? 4 : 2,
       });
+      if (isSelected) marker.bringToFront();
     });
   }, [selectedConsumerIds, consumerList]);
 
@@ -357,15 +450,6 @@ function VehicleTracker() {
     map.current?.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 18 });
   };
 
-  const toggleConsumer = (consumerId) => {
-    const id = String(consumerId);
-    setSelectedConsumerIds((current) => {
-      if (consumerSelectionMode === "single") return [id];
-      if (current.includes(id)) return current.filter((item) => item !== id);
-      return [...current, id];
-    });
-  };
-
   return (
     <section className="space-y-4">
       <div className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-3 sm:p-4 xl:grid-cols-[minmax(220px,0.8fr)_minmax(300px,1.35fr)_minmax(230px,0.85fr)]">
@@ -382,21 +466,33 @@ function VehicleTracker() {
             <div className="flex rounded-lg bg-slate-200/70 p-0.5">
               <button type="button" className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${consumerSelectionMode === "single" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`} onClick={() => { setConsumerSelectionMode("single"); setSelectedConsumerIds((current) => current.slice(0, 1)); }}>Single</button>
               <button type="button" className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${consumerSelectionMode === "multiple" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`} onClick={() => setConsumerSelectionMode("multiple")}>Multiple</button>
-              {selectedConsumerIds.length > 0 && <button type="button" className="px-2 py-1.5 text-xs font-semibold text-slate-500 hover:text-rose-700" onClick={() => setSelectedConsumerIds([])}>Clear</button>}
             </div>
           </div>
-          <input className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" value={consumerQuery} onChange={(event) => setConsumerQuery(event.target.value)} placeholder="Search name, holding, street or locality" />
-          <div className="max-h-44 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
-            {filteredConsumerList.slice(0, 100).map((consumer) => {
-              const id = String(consumer.id);
-              return <label key={id} className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 text-sm transition hover:bg-emerald-50">
-                <input className="mt-0.5 accent-emerald-600" type={consumerSelectionMode === "single" ? "radio" : "checkbox"} name="consumer-destination" checked={selectedConsumerIds.includes(id)} onChange={() => toggleConsumer(id)} />
-                <span className="min-w-0"><span className="block font-medium text-slate-800">{consumer.consumerNo || consumer.consumer_no || `Consumer ${id}`}</span><span className="block truncate text-xs text-slate-500">{consumerBuildingName(consumer)}</span></span>
-              </label>;
-            })}
-            {filteredConsumerList.length === 0 && <p className="py-2 text-gray-500">No matching consumers.</p>}
-            {filteredConsumerList.length > 100 && <p className="py-2 text-xs text-gray-500">Showing first 100 matches. Refine your search.</p>}
-          </div>
+          <Select
+            aria-label="Consumer destination"
+            className="text-sm"
+            isMulti={isMulti}
+            isClearable
+            closeMenuOnSelect={!isMulti}
+            options={consumerOptions}
+            value={isMulti ? selectedOptions : selectedOptions[0] ?? null}
+            onChange={(selection) => {
+              const options = Array.isArray(selection) ? selection : selection ? [selection] : [];
+              setSelectedConsumerIds(options.map((option) => option.value));
+            }}
+            inputValue={consumerQuery}
+            onInputChange={setConsumerQuery}
+            filterOption={null}
+            placeholder="Select or search for a consumer…"
+            noOptionsMessage={() => "No matching consumers"}
+            screenReaderStatus={() =>
+              filteredConsumerList.length > 100
+                ? "Showing the first 100 matches. Refine your search."
+                : `${filteredConsumerList.length} matches`
+            }
+            menuPortalTarget={document.body}
+            styles={{ menuPortal: (base) => ({ ...base, zIndex: 1100 }) }}
+          />
         </div>
         <div className="flex min-w-0 flex-col gap-2">
           <label htmlFor="area-search" className="text-xs font-semibold uppercase tracking-wide text-slate-500">Search area</label>
@@ -408,8 +504,21 @@ function VehicleTracker() {
         </div>
         {directionsUrl && <a className="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800 sm:col-span-2 xl:col-span-3" href={directionsUrl} target="_blank" rel="noreferrer">Open route from latest TC visit{selectedConsumerIds.length > 1 ? " to first selected consumer" : ""}</a>}
       </div>
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
-        <div ref={mapElement} className="h-[360px] w-full rounded-xl sm:h-[440px] xl:h-[520px]" />
+      <div ref={mapPanel} className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          className="absolute right-4 top-4 z-[1000] rounded-lg bg-white px-3 py-2 text-sm font-semibold shadow"
+        >
+          {isFullscreen ? "Exit full screen" : "Full screen"}
+        </button>
+        {fullscreenError && <p role="status" className="absolute right-4 top-16 z-[1000] rounded-lg bg-white p-2 text-sm shadow">{fullscreenError}</p>}
+        {tilesUnavailable && <p role="status" className="absolute bottom-9 left-4 z-[1000] rounded-lg bg-white p-2 text-sm shadow">Map tiles unavailable.</p>}
+        <div
+          ref={mapElement}
+          className="h-[360px] w-full rounded-xl sm:h-[440px] xl:h-[520px]"
+          style={isFullscreen ? { height: "100%" } : undefined}
+        />
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1 text-[11px] font-medium text-slate-500 sm:text-xs">
         <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-blue-500" /> Vehicle</span>
