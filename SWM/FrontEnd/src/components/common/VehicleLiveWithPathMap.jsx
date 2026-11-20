@@ -41,6 +41,8 @@ const consumerOption = (consumer) => ({
   label: consumerBuildingName(consumer) || `Consumer ${consumer.id}`,
 });
 
+const truckIconUrl = `${import.meta.env.BASE_URL}icons/truck.png`;
+
 function VehicleTracker() {
   const token = getToken();
   const mapPanel = useRef(null);
@@ -49,6 +51,7 @@ function VehicleTracker() {
   const hasFittedConsumers = useRef(false);
   const framedRoute = useRef(null);
   const vehicleMarkers = useRef({});
+  const vehicleIcon = useRef(null);
   const vehiclePaths = useRef({});
   const tcMarkers = useRef({});
   const tcPaths = useRef({});
@@ -145,7 +148,13 @@ function VehicleTracker() {
       if (!point) return;
       const id = vehicle.id;
       if (!vehicleMarkers.current[id]) {
-        vehicleMarkers.current[id] = L.marker(point).addTo(map.current)
+        vehicleIcon.current ??= L.icon({
+          iconUrl: truckIconUrl,
+          iconSize: [36, 36],
+          iconAnchor: [18, 18],
+          tooltipAnchor: [0, -18],
+        });
+        vehicleMarkers.current[id] = L.marker(point, { icon: vehicleIcon.current }).addTo(map.current)
           .bindTooltip(vehicle.vehicleNo || `Vehicle ${id}`, { direction: "top" });
       } else {
         vehicleMarkers.current[id].setLatLng(point);
@@ -521,7 +530,7 @@ function VehicleTracker() {
         />
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1 text-[11px] font-medium text-slate-500 sm:text-xs">
-        <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-blue-500" /> Vehicle</span>
+        <span className="inline-flex items-center gap-1.5"><img src={truckIconUrl} alt="" className="h-4 w-4" /> Vehicle</span>
         <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-violet-500" /> TC visit route</span>
         <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-amber-400" /> Selected consumer</span>
         <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-rose-500" /> Visited</span>
