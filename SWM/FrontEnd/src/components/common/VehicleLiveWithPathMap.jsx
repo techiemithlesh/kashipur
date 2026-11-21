@@ -43,6 +43,32 @@ const consumerOption = (consumer) => ({
 
 const truckIconUrl = `${import.meta.env.BASE_URL}icons/truck.png`;
 
+// The cab points north at zero degrees. Leaflet positions the outer marker.
+const directionalTruck = `
+  <div class="vehicle-heading relative h-full w-full" aria-hidden="true">
+    <span class="absolute inset-x-0 bottom-1 top-2 rounded bg-slate-950"></span>
+    <span class="absolute inset-x-0.5 top-0 h-4 rounded-t-md border-2 border-white bg-sky-600"></span>
+    <span class="absolute inset-x-1.5 top-1 h-1.5 rounded-sm bg-slate-950"></span>
+    <span class="absolute inset-x-1 bottom-0 top-4 rounded-b border-2 border-white bg-rose-600"></span>
+  </div>`;
+
+function getBearing([fromLat, fromLng], [toLat, toLng]) {
+  if (fromLat === toLat && fromLng === toLng) return null;
+
+  const radians = Math.PI / 180;
+  const start = fromLat * radians;
+  const end = toLat * radians;
+  const delta = (toLng - fromLng) * radians;
+  const east = Math.sin(delta) * Math.cos(end);
+  const north = Math.cos(start) * Math.sin(end) - Math.sin(start) * Math.cos(end) * Math.cos(delta);
+  return (Math.atan2(east, north) / radians + 360) % 360;
+}
+
+function setTruckHeading(marker, heading) {
+  const graphic = marker.getElement()?.querySelector(".vehicle-heading");
+  if (graphic) graphic.style.transform = `rotate(${heading}deg)`;
+}
+
 function VehicleTracker() {
   const token = getToken();
   const mapPanel = useRef(null);
@@ -51,6 +77,8 @@ function VehicleTracker() {
   const hasFittedConsumers = useRef(false);
   const framedRoute = useRef(null);
   const vehicleMarkers = useRef({});
+  const vehicleAnimationFrames = useRef(new Map());
+  const vehicleHeadings = useRef(new Map());
   const vehicleIcon = useRef(null);
   const vehiclePaths = useRef({});
   const tcMarkers = useRef({});
@@ -141,31 +169,70 @@ function VehicleTracker() {
     });
   }, [token]);
 
+  const moveVehicleMarker = useCallback((id, marker, [latitude, longitude], previousPoint) => {
+    const frames = vehicleAnimationFrames.current;
+    if (frames.has(id)) cancelAnimationFrame(frames.get(id));
+
+    const from = marker.getLatLng();
+    const headings = vehicleHeadings.current;
+    const currentHeading = headings.get(id) ?? 0;
+    const targetHeading = getBearing(previousPoint ?? [from.lat, from.lng], [latitude, longitude]) ?? currentHeading;
+    const turn = ((targetHeading - currentHeading + 540) % 360) - 180;
+    const startedAt = performance.now();
+    const duration = 4000;
+
+    function animate(now) {
+      const progress = Math.min((now - startedAt) / duration, 1);
+      marker.setLatLng([
+        from.lat + (latitude - from.lat) * progress,
+        from.lng + (longitude - from.lng) * progress,
+      ]);
+      const heading = (currentHeading + turn * progress + 360) % 360;
+      headings.set(id, heading);
+      setTruckHeading(marker, heading);
+
+      if (progress < 1) {
+        frames.set(id, requestAnimationFrame(animate));
+      } else {
+        frames.delete(id);
+      }
+    }
+
+    frames.set(id, requestAnimationFrame(animate));
+  }, []);
+
   const drawVehicles = useCallback((items) => {
     if (!map.current || !Array.isArray(items)) return;
     items.forEach((vehicle) => {
       const point = coordinates(vehicle.latitude, vehicle.longitude);
       if (!point) return;
-      const id = vehicle.id;
+      const id = String(vehicle.id);
+      const points = Object.values(vehicle.path ?? {})
+        .map((entry) => coordinates(entry?.latitude, entry?.longitude))
+        .filter(Boolean);
+      const previousPoint = points.at(-2);
       if (!vehicleMarkers.current[id]) {
-        vehicleIcon.current ??= L.icon({
-          iconUrl: truckIconUrl,
-          iconSize: [36, 36],
-          iconAnchor: [18, 18],
-          tooltipAnchor: [0, -18],
+        vehicleIcon.current ??= L.divIcon({
+          className: "",
+          html: directionalTruck,
+          iconSize: [26, 40],
+          iconAnchor: [13, 20],
+          tooltipAnchor: [0, -20],
         });
         vehicleMarkers.current[id] = L.marker(point, { icon: vehicleIcon.current }).addTo(map.current)
           .bindTooltip(vehicle.vehicleNo || `Vehicle ${id}`, { direction: "top" });
+        const heading = previousPoint ? getBearing(previousPoint, point) ?? 0 : 0;
+        vehicleHeadings.current.set(id, heading);
+        setTruckHeading(vehicleMarkers.current[id], heading);
       } else {
-        vehicleMarkers.current[id].setLatLng(point);
+        moveVehicleMarker(id, vehicleMarkers.current[id], point, previousPoint);
       }
-      const points = (vehicle.path || []).map((entry) => coordinates(entry.latitude, entry.longitude)).filter(Boolean);
       if (points.length) {
         if (!vehiclePaths.current[id]) vehiclePaths.current[id] = L.polyline(points, { color: "#0891b2", weight: 4 }).addTo(map.current);
         else vehiclePaths.current[id].setLatLngs(points);
       }
     });
-  }, []);
+  }, [moveVehicleMarker]);
 
   const drawVisits = useCallback((rows) => {
     if (!map.current || !Array.isArray(rows)) return;
@@ -270,6 +337,12 @@ function VehicleTracker() {
       map.current?.off("dblclick", handleMapDoubleClick);
       if (echo.current) echo.current.disconnect();
       echo.current = null;
+      const frames = vehicleAnimationFrames.current;
+      frames.forEach((frame) => cancelAnimationFrame(frame));
+      frames.clear();
+      vehicleHeadings.current.clear();
+      vehicleMarkers.current = {};
+      vehiclePaths.current = {};
       map.current?.remove();
       map.current = null;
       hasFittedConsumers.current = false;
