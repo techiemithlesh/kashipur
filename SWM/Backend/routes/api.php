@@ -21,9 +21,6 @@ use Illuminate\Support\Facades\Route;
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
-Route::get("/getInfo",function(){
-    echo phpinfo();die;
-});
 
 Route::match(["get","post"],"fyear/list",function(){
     $data = FyListdesc();
