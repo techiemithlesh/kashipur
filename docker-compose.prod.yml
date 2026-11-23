@@ -1,0 +1,61 @@
+# Production override. Used together with the base file:
+#   docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml ...
+# (deploy/scripts/*.sh do this for you.)
+#
+# Public surface: only Caddy (80/443). Everything else stays on private Docker networks.
+# PostgreSQL is published on the VPS loopback only, for pgAdmin/psql through an SSH tunnel.
+
+services:
+  caddy:
+    image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in the env file}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in the env file}
+    volumes:
+      - type: bind
+        source: ./deploy/caddy/Caddyfile
+        target: /etc/caddy/Caddyfile
+        read_only: true
+      - type: volume
+        source: caddy_data
+        target: /data
+      - type: volume
+        source: caddy_config
+        target: /config
+    depends_on:
+      frontend:
+        condition: service_healthy
+    networks:
+      - app
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  frontend:
+    # Reachable only through Caddy.
+    ports: !reset []
+
+  db:
+    ports:
+      # Loopback only: never reachable from the internet. Connect with an SSH tunnel.
+      - "127.0.0.1:${DB_ADMIN_PORT:-5432}:5432"
+    networks:
+      - data
+      # The data network is internal (no port publishing), so the db joins one extra
+      # bridge network that exists only to carry the loopback-published admin port.
+      - dbadmin
+
+networks:
+  dbadmin:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

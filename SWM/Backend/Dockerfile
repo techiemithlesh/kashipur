@@ -61,6 +61,10 @@ RUN mkdir -p \
         bootstrap/cache \
         public/Uploads
 
+COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/swm-entrypoint
+
 EXPOSE 9000
+
+ENTRYPOINT ["swm-entrypoint"]
 
 CMD ["php-fpm"]

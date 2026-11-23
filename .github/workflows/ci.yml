@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  config:
+    name: Lint deploy config
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose (local + production)
+        run: |
+          docker compose --env-file .env.docker.example config -q
+          docker compose --env-file .env.production.example -f docker-compose.yml -f docker-compose.prod.yml config -q
+      - name: ShellCheck
+        run: shellcheck -x deploy/scripts/*.sh SWM/Backend/docker/entrypoint.sh
+      - name: Caddyfile
+        run: docker run --rm -e DOMAIN=example.com -e ACME_EMAIL=ops@example.com -v "$PWD/deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
+
+  build:
+    name: Build ${{ matrix.service }} image
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          - service: backend
+            context: SWM/Backend
+          - service: frontend
+            context: SWM/FrontEnd
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: false
+          build-args: |
+            VITE_REACT_APP_BACKEND_API=https://ci.example.com
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}

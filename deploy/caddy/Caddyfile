@@ -1,0 +1,35 @@
+# Edge proxy: automatic HTTPS (Let's Encrypt), HTTP->HTTPS redirect, HTTP/3, compression.
+# DOMAIN and ACME_EMAIL come from the env file (see docker-compose.prod.yml).
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Frame-Options "SAMEORIGIN"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(self)"
+		-Server
+		-X-Powered-By
+	}
+
+	# Clients must not choose the IP the app records (see getClientIpAddress()).
+	request_header -Client-IP
+	request_header -CF-Connecting-IP
+
+	# WebSockets (/app/*) are proxied transparently, no extra config needed.
+	reverse_proxy frontend:80
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}

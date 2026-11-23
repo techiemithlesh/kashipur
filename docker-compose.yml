@@ -1,17 +1,25 @@
 name: swm
 
+# Rotate container logs so they can't fill the disk.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 x-backend-environment: &backend-environment
   APP_NAME: ${APP_NAME:-SWM}
   APP_ENV: ${APP_ENV:-production}
-  APP_KEY: ${APP_KEY:?Set APP_KEY in .env.docker}
+  APP_KEY: ${APP_KEY:?Set APP_KEY in the env file}
   APP_DEBUG: ${APP_DEBUG:-false}
-  APP_URL: ${APP_URL:?Set APP_URL in .env.docker}
+  APP_URL: ${APP_URL:?Set APP_URL in the env file}
+  ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-${APP_URL}}
   LOG_CHANNEL: ${LOG_CHANNEL:-stderr}
   LOG_LEVEL: ${LOG_LEVEL:-warning}
   BROADCAST_CONNECTION: ${BROADCAST_CONNECTION:-reverb}
-  REVERB_APP_ID: ${REVERB_APP_ID:?Set REVERB_APP_ID in .env.docker}
-  REVERB_APP_KEY: ${REVERB_APP_KEY:?Set REVERB_APP_KEY in .env.docker}
-  REVERB_APP_SECRET: ${REVERB_APP_SECRET:?Set REVERB_APP_SECRET in .env.docker}
+  REVERB_APP_ID: ${REVERB_APP_ID:?Set REVERB_APP_ID in the env file}
+  REVERB_APP_KEY: ${REVERB_APP_KEY:?Set REVERB_APP_KEY in the env file}
+  REVERB_APP_SECRET: ${REVERB_APP_SECRET:?Set REVERB_APP_SECRET in the env file}
   # Laravel publishes events to Reverb over the internal network.
   REVERB_HOST: reverb
   REVERB_PORT: "8080"
@@ -27,13 +35,13 @@ x-backend-environment: &backend-environment
   DB_HOST: db
   DB_PORT: "5432"
   DB_DATABASE: ${DB_DATABASE:-db_swm_master}
-  DB_USERNAME: ${DB_USERNAME:?Set DB_USERNAME in .env.docker}
-  DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env.docker}
+  DB_USERNAME: ${DB_USERNAME:?Set DB_USERNAME in the env file}
+  DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the env file}
   DB_CONSUMER_HOST: db
   DB_CONSUMER_PORT: "5432"
   DB_CONSUMER_DATABASE: ${DB_CONSUMER_DATABASE:-db_swm_consumer}
-  DB_CONSUMER_USERNAME: ${DB_CONSUMER_USERNAME:?Set DB_CONSUMER_USERNAME in .env.docker}
-  DB_CONSUMER_PASSWORD: ${DB_CONSUMER_PASSWORD:?Set DB_CONSUMER_PASSWORD in .env.docker}
+  DB_CONSUMER_USERNAME: ${DB_CONSUMER_USERNAME:?Set DB_CONSUMER_USERNAME in the env file}
+  DB_CONSUMER_PASSWORD: ${DB_CONSUMER_PASSWORD:?Set DB_CONSUMER_PASSWORD in the env file}
   REDIS_CLIENT: predis
   REDIS_HOST: redis
   REDIS_PORT: "6379"
@@ -54,7 +62,7 @@ x-backend-volumes: &backend-volumes
 
 services:
   frontend:
-    image: swm-frontend:local
+    image: swm-frontend:${IMAGE_TAG:-local}
     build:
       context: ./SWM/FrontEnd
       args:
@@ -82,6 +90,7 @@ services:
     networks:
       - app
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
       interval: 30s
@@ -90,7 +99,7 @@ services:
       start_period: 5s
 
   backend:
-    image: swm-backend:local
+    image: swm-backend:${IMAGE_TAG:-local}
     build:
       context: ./SWM/Backend
     environment: *backend-environment
@@ -104,6 +113,7 @@ services:
       - app
       - data
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test:
         - CMD-SHELL
@@ -114,7 +124,8 @@ services:
       start_period: 15s
 
   queue:
-    image: swm-backend:local
+    user: www-data
+    image: swm-backend:${IMAGE_TAG:-local}
     command:
       - php
       - artisan
@@ -137,9 +148,11 @@ services:
       - app
       - data
     restart: unless-stopped
+    logging: *default-logging
 
   reverb:
-    image: swm-backend:local
+    user: www-data
+    image: swm-backend:${IMAGE_TAG:-local}
     command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080", "--no-interaction"]
     environment: *backend-environment
     volumes: *backend-volumes
@@ -152,6 +165,7 @@ services:
       - app
       - data
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test:
         - CMD-SHELL
@@ -164,15 +178,15 @@ services:
   db:
     image: postgres:17-alpine@sha256:f9cf3e1f0066f0eb0c48707d864f0ac5941e9ff454a072077d97a4d278d07d73
     environment:
-      POSTGRES_USER: ${POSTGRES_ADMIN_USER:?Set POSTGRES_ADMIN_USER in .env.docker}
-      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD in .env.docker}
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER:?Set POSTGRES_ADMIN_USER in the env file}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD in the env file}
       POSTGRES_DB: postgres
       DB_DATABASE: ${DB_DATABASE:-db_swm_master}
-      DB_USERNAME: ${DB_USERNAME:?Set DB_USERNAME in .env.docker}
-      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env.docker}
+      DB_USERNAME: ${DB_USERNAME:?Set DB_USERNAME in the env file}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the env file}
       DB_CONSUMER_DATABASE: ${DB_CONSUMER_DATABASE:-db_swm_consumer}
-      DB_CONSUMER_USERNAME: ${DB_CONSUMER_USERNAME:?Set DB_CONSUMER_USERNAME in .env.docker}
-      DB_CONSUMER_PASSWORD: ${DB_CONSUMER_PASSWORD:?Set DB_CONSUMER_PASSWORD in .env.docker}
+      DB_CONSUMER_USERNAME: ${DB_CONSUMER_USERNAME:?Set DB_CONSUMER_USERNAME in the env file}
+      DB_CONSUMER_PASSWORD: ${DB_CONSUMER_PASSWORD:?Set DB_CONSUMER_PASSWORD in the env file}
     volumes:
       - type: volume
         source: postgres_data
@@ -192,6 +206,7 @@ services:
     networks:
       - data
     restart: unless-stopped
+    logging: *default-logging
 
   redis:
     image: redis:7.4-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
@@ -209,6 +224,7 @@ services:
     networks:
       - data
     restart: unless-stopped
+    logging: *default-logging
 
 networks:
   app:
