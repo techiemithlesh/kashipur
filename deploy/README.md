@@ -66,7 +66,7 @@ cp .env.production.example .env.production
 chmod 600 .env.production
 ```
 
-Edit `.env.production` and replace all placeholders. The configured database names/user are `db_system`, `db_swm_consumer`, and `swm_user`; enter the PostgreSQL password in the `DB_PASSWORD`, `DB_READ_PASSWORD`, `DB_CONSUMER_PASSWORD`, and `DB_CONSUMER_READ_PASSWORD` fields in this server-only file. Set a valid `ACME_EMAIL`, a Laravel key, a strong unique Redis password, and Reverb credentials. Do not commit `.env.production` or put database passwords in tracked examples.
+Edit `.env.production` and replace all placeholders. The configured database names/user are `db_swm_master`, `db_swm_consumer`, and `swm_user`; enter the PostgreSQL password in the `DB_PASSWORD`, `DB_READ_PASSWORD`, `DB_CONSUMER_PASSWORD`, and `DB_CONSUMER_READ_PASSWORD` fields in this server-only file. Set a valid `ACME_EMAIL`, a Laravel key, a strong unique Redis password, and Reverb credentials. Do not commit `.env.production` or put database passwords in tracked examples.
 
 Generate a Redis password on the VPS and place it after `REDIS_PASSWORD=` in `.env.production` (do not share or commit it):
 
@@ -113,7 +113,7 @@ sudo ufw allow from 172.30.0.0/24 to any port 5432 proto tcp
 docker compose --env-file .env.production exec backend getent hosts host.docker.internal
 ```
 
-Apply the server-specific `listen_addresses` and `pg_hba.conf` updates, reload PostgreSQL, and verify connectivity from a backend container before production traffic. The current Laravel database configuration exposes the main `pgsql` connection to `db_system` and the consumer `pgsql_swm` connection to `db_swm_consumer`, both using `swm_user`. Important: the database-creation command supplied for the VPS names the second database `db_swm`, while the selected backend `.env` value is `db_swm_consumer`. Verify the actual database list on the VPS and reconcile this mismatch before deploying; the deployment will not create, rename, or migrate either database automatically. The old backend example also mentions property/water/trade variables that are not configured as connections in `config/database.php`; confirm whether any separate databases are still required before proceeding.
+Apply the server-specific `listen_addresses` and `pg_hba.conf` updates, reload PostgreSQL, and verify connectivity from a backend container before production traffic. The main `pgsql` connection uses `db_swm_master` and the consumer `pgsql_swm` connection uses `db_swm_consumer`, both as `swm_user`. The deployment will not create, rename, or migrate either database automatically. The old backend example also mentions property/water/trade variables that are not configured as connections in `config/database.php`; confirm whether any separate databases are still required before proceeding.
 
 Back up existing databases and confirm the migration plan before running any migration. The deployment script deliberately does not run migrations or create/reset databases. If migrations are approved, use the backend container during a maintenance window:
 
