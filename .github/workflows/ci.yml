@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [v2]
   pull_request:
 
 permissions:
@@ -23,7 +23,7 @@ jobs:
           docker compose --env-file .env.docker.example config -q
           docker compose --env-file .env.production.example -f docker-compose.yml -f docker-compose.prod.yml config -q
       - name: ShellCheck
-        run: shellcheck -x deploy/scripts/*.sh SWM/Backend/docker/entrypoint.sh
+        run: shellcheck -x deploy/scripts/*.sh SWM/Backend/docker/entrypoint.sh docker/postgres/*.sh
       - name: Caddyfile
         run: docker run --rm -e DOMAIN=example.com -e ACME_EMAIL=ops@example.com -v "$PWD/deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
 

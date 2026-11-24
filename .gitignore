@@ -3,3 +3,4 @@
 /docker/postgres/dumps/
 /.env.production
 /backups/
+/.secrets/

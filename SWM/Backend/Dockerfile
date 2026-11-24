@@ -28,12 +28,16 @@ RUN apt-get update \
 COPY . .
 COPY public/UlbLog ./storage/app/public/UlbLog
 
+# Uploads: PHP-FPM runs in public/, so the code writes to public/<path>. Each upload folder
+# under public/ is a symlink into the persistent volumes (storage/app/public = served by nginx,
+# storage/app/private = never served), so files survive redeploys.
 RUN mkdir -p \
         storage/app/public/user/img \
+        storage/app/public/user/signature \
         storage/app/public/driver/img \
         storage/app/public/Uploads/UlbOfficers \
+        storage/app/public/documents \
         storage/app/public/UlbLog \
-        storage/app/private/user/signature \
         storage/app/private/Uploads/SwmTranDeactivation \
         storage/app/private/Uploads/SwmDeactivation \
         storage/framework/cache/data \
@@ -41,16 +45,16 @@ RUN mkdir -p \
         storage/framework/views \
         storage/logs \
         bootstrap/cache \
+        public/user \
+        public/driver \
         public/Uploads \
-        user \
-        driver \
-        Uploads \
-    && ln -s ../storage/app/public/user/img user/img \
-    && ln -s ../storage/app/public/driver/img driver/img \
+    && ln -s ../../storage/app/public/user/img public/user/img \
+    && ln -s ../../storage/app/public/user/signature public/user/signature \
+    && ln -s ../../storage/app/public/driver/img public/driver/img \
     && ln -s ../../storage/app/public/Uploads/UlbOfficers public/Uploads/UlbOfficers \
-    && ln -s ../storage/app/private/user/signature user/signature \
-    && ln -s ../storage/app/private/Uploads/SwmTranDeactivation Uploads/SwmTranDeactivation \
-    && ln -s ../storage/app/private/Uploads/SwmDeactivation Uploads/SwmDeactivation \
+    && ln -s ../storage/app/public/documents public/documents \
+    && ln -s ../../storage/app/private/Uploads/SwmTranDeactivation public/Uploads/SwmTranDeactivation \
+    && ln -s ../../storage/app/private/Uploads/SwmDeactivation public/Uploads/SwmDeactivation \
     && COMPOSER_ALLOW_SUPERUSER=1 composer dump-autoload \
         --no-dev \
         --optimize \
