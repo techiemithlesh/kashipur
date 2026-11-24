@@ -166,7 +166,9 @@ services:
         bind:
           create_host_path: false
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      test:
+        - CMD-SHELL
+        - 'wget -q --header="Host: $${DOMAIN}" -O /dev/null http://127.0.0.1/healthz'
       interval: 10s
       timeout: 3s
       retries: 5

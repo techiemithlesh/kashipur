@@ -68,6 +68,19 @@ chmod 600 .env.production
 
 Edit `.env.production` and replace all placeholders. The configured database names/user are `db_system`, `db_swm_consumer`, and `swm_user`; enter the PostgreSQL password in the `DB_PASSWORD`, `DB_READ_PASSWORD`, `DB_CONSUMER_PASSWORD`, and `DB_CONSUMER_READ_PASSWORD` fields in this server-only file. Set a valid `ACME_EMAIL`, a Laravel key, a strong unique Redis password, and Reverb credentials. Do not commit `.env.production` or put database passwords in tracked examples.
 
+Generate a Redis password on the VPS and place it after `REDIS_PASSWORD=` in `.env.production` (do not share or commit it):
+
+```sh
+openssl rand -hex 32
+nano .env.production
+```
+
+Compose requires every deployment value to be present even when starting only selected services. Validate the complete file before starting containers:
+
+```sh
+docker compose --env-file .env.production config -q
+```
+
 Generate a Laravel key after building the backend image, without writing it into the repository:
 
 ```sh
