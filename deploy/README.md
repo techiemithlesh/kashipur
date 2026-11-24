@@ -83,11 +83,12 @@ The frontend API and Reverb endpoints are build-time values. Keep `VITE_REACT_AP
 
 The Compose services use `host.docker.internal` via Docker's `host-gateway` mapping. PostgreSQL must accept TCP connections on the host-gateway address and have `pg_hba.conf` entries for the Compose network's subnet, limited to the required existing databases/users and `scram-sha-256` authentication. Do not bind PostgreSQL to a public interface or allow public 5432 access.
 
-The Compose network is named `swm_default`; inspect its actual subnet and the host-gateway address on the VPS before changing PostgreSQL configuration. PostgreSQL versions and config paths can differ:
+The Compose network name depends on the Compose project name. Since this checkout is in `/opt/swm/kashipur`, the default network is `kashipur_default` unless `COMPOSE_PROJECT_NAME` is set. Inspect the actual network subnet and the host-gateway address on the VPS before changing PostgreSQL configuration. PostgreSQL versions and config paths can differ:
 
 ```sh
-docker network inspect swm_default
-getent hosts host.docker.internal
+docker network ls
+docker network inspect kashipur_default
+docker compose --env-file .env.production exec backend getent hosts host.docker.internal
 ```
 
 Apply the server-specific `listen_addresses` and `pg_hba.conf` updates, reload PostgreSQL, and verify connectivity from a backend container before production traffic. The current Laravel database configuration exposes the main `pgsql` connection to `db_system` and the consumer `pgsql_swm` connection to `db_swm_consumer`, both using `swm_user`. Important: the database-creation command supplied for the VPS names the second database `db_swm`, while the selected backend `.env` value is `db_swm_consumer`. Verify the actual database list on the VPS and reconcile this mismatch before deploying; the deployment will not create, rename, or migrate either database automatically. The old backend example also mentions property/water/trade variables that are not configured as connections in `config/database.php`; confirm whether any separate databases are still required before proceeding.
