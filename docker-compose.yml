@@ -201,3 +201,11 @@ volumes:
   letsencrypt:
   redis-data:
 
+# Fixed subnet so host PostgreSQL pg_hba.conf and UFW rules stay valid across down/up and reboots.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          gateway: 172.30.0.1
+

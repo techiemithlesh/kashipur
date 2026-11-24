@@ -96,11 +96,20 @@ The frontend API and Reverb endpoints are build-time values. Keep `VITE_REACT_AP
 
 The Compose services use `host.docker.internal` via Docker's `host-gateway` mapping. PostgreSQL must accept TCP connections on the host-gateway address and have `pg_hba.conf` entries for the Compose network's subnet, limited to the required existing databases/users and `scram-sha-256` authentication. Do not bind PostgreSQL to a public interface or allow public 5432 access.
 
-The Compose network name depends on the Compose project name. Since this checkout is in `/opt/swm/kashipur`, the default network is `kashipur_default` unless `COMPOSE_PROJECT_NAME` is set. Inspect the actual network subnet and the host-gateway address on the VPS before changing PostgreSQL configuration. PostgreSQL versions and config paths can differ:
+The Compose network (`kashipur_default`) is pinned to `172.30.0.0/24` with gateway `172.30.0.1` in `docker-compose.yml`, so container source addresses stay in that range across `down`/`up` and reboots. `pg_hba.conf` must allow `swm_user` on `db_swm_master` and `db_swm_consumer` from `172.30.0.0/24` with `scram-sha-256`, and UFW must allow `172.30.0.0/24` to port 5432 only:
+
+```
+# pg_hba.conf
+host  db_swm_master,db_swm_consumer  swm_user  172.30.0.0/24  scram-sha-256
+```
 
 ```sh
-docker network ls
-docker network inspect kashipur_default
+sudo ufw allow from 172.30.0.0/24 to any port 5432 proto tcp
+```
+
+`listen_addresses` must include the address `host.docker.internal` resolves to inside the containers (Docker's host-gateway, usually `172.17.0.1`). Confirm it after the first start; PostgreSQL versions and config paths can differ:
+
+```sh
 docker compose --env-file .env.production exec backend getent hosts host.docker.internal
 ```
 
