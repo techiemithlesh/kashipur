@@ -1,6 +1,7 @@
 /AGENTS.md
 /.env.docker
-/docker/postgres/dumps/
 /.env.production
+/.local-data/
+/docker/postgres/dumps/
 /backups/
 /.secrets/

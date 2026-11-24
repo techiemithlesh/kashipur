@@ -15,12 +15,10 @@ run_artisan() {
 
 # Upload folders live on volumes that may predate a new folder; public/* symlinks point here.
 if [ "$(id -u)" = "0" ]; then
-    mkdir -p \
-        storage/app/public/user/img storage/app/public/user/signature \
-        storage/app/public/driver/img storage/app/public/Uploads/UlbOfficers \
-        storage/app/public/documents \
-        storage/app/private/Uploads/SwmTranDeactivation storage/app/private/Uploads/SwmDeactivation
+    mkdir -p storage/app/public storage/app/private
     chown -R www-data:www-data storage/app/public storage/app/private
+    find storage/app/public storage/app/private -type d -exec chmod 2775 {} +
+    find storage/app/public storage/app/private -type f -exec chmod 0664 {} +
 fi
 
 if [ "${APP_ENV:-production}" = "production" ]; then

@@ -1,0 +1,23 @@
+services:
+  frontend:
+    build:
+      args:
+        VITE_REVERB_HOST: localhost
+        VITE_REVERB_PORT: "8080"
+        VITE_REVERB_SCHEME: http
+    ports:
+      - "8080:80"
+  backend:
+    environment:
+      REVERB_HOST: localhost
+      REVERB_PORT: "8080"
+      REVERB_SCHEME: http
+  reverb:
+    environment:
+      REVERB_HOST: localhost
+      REVERB_PORT: "8080"
+      REVERB_SCHEME: http
+  nginx:
+    profiles: ["production"]
+  certbot:
+    profiles: ["production"]

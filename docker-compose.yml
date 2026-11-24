@@ -1,0 +1,201 @@
+name: kashipur
+
+x-backend: &backend
+  build:
+    context: ./SWM/Backend
+  image: swm-backend:${IMAGE_TAG:-latest}
+  env_file:
+    - ${SWM_ENV_FILE:-.env.production}
+  init: true
+  restart: unless-stopped
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  environment: &backend-environment
+    APP_ENV: production
+    APP_DEBUG: "false"
+    APP_URL: ${APP_URL:?Set APP_URL in the deployment environment}
+    APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Kolkata}
+    LOG_CHANNEL: stderr
+    LOG_LEVEL: ${LOG_LEVEL:-info}
+    DB_HOST: host.docker.internal
+    DB_READ_HOST: host.docker.internal
+    DB_CONSUMER_HOST: host.docker.internal
+    DB_CONSUMER_READ_HOST: host.docker.internal
+    REDIS_CLIENT: predis
+    REDIS_HOST: redis
+    REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the deployment environment}
+    REDIS_PORT: "6379"
+    CACHE_STORE: redis
+    QUEUE_CONNECTION: redis
+    REDIS_QUEUE_RETRY_AFTER: "120"
+    SESSION_DRIVER: redis
+    BROADCAST_CONNECTION: reverb
+    REVERB_HOST: ${API_DOMAIN:?Set API_DOMAIN in the deployment environment}
+    REVERB_PORT: "443"
+    REVERB_SCHEME: https
+    REVERB_SERVER_HOST: 0.0.0.0
+    REVERB_SERVER_PORT: "8080"
+    ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?Set ALLOWED_ORIGINS in the deployment environment}
+  volumes: &backend-volumes
+    - type: bind
+      source: ${SWM_DATA_ROOT:-/data/swm}/public
+      target: /var/www/html/storage/app/public
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ${SWM_DATA_ROOT:-/data/swm}/private
+      target: /var/www/html/storage/app/private
+      bind:
+        create_host_path: false
+  depends_on:
+    redis:
+      condition: service_healthy
+
+services:
+  redis:
+    image: redis:7.4-alpine
+    command:
+      ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$${REDIS_PASSWORD}\""]
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the deployment environment}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    <<: *backend
+    command: ["php-fpm", "-F"]
+    healthcheck:
+      test:
+        - CMD
+        - php
+        - -r
+        - "$$socket = @fsockopen('127.0.0.1', 9000); exit($$socket ? 0 : 1);"
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./SWM/FrontEnd
+      args:
+        VITE_REACT_APP_BACKEND_API: ${VITE_REACT_APP_BACKEND_API:?Set VITE_REACT_APP_BACKEND_API}
+        VITE_REACT_APP_ULB_ID: ${VITE_REACT_APP_ULB_ID:-}
+        VITE_MAP_TILE_URL: ${VITE_MAP_TILE_URL:-}
+        VITE_MAP_ATTRIBUTION: ${VITE_MAP_ATTRIBUTION:-}
+        VITE_MAP_STREET_LABELS_URL: ${VITE_MAP_STREET_LABELS_URL:-}
+        VITE_MAP_PLACE_LABELS_URL: ${VITE_MAP_PLACE_LABELS_URL:-}
+        VITE_ROUTING_URL: ${VITE_ROUTING_URL:-}
+        VITE_REVERB_APP_KEY: ${REVERB_APP_KEY:?Set REVERB_APP_KEY}
+        VITE_REVERB_HOST: ${API_DOMAIN:?Set API_DOMAIN}
+        VITE_REVERB_PORT: "443"
+        VITE_REVERB_SCHEME: https
+    image: swm-frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      reverb:
+        condition: service_healthy
+    volumes:
+      - type: bind
+        source: ${SWM_DATA_ROOT:-/data/swm}/public
+        target: /srv/swm/storage/app/public
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  reverb:
+    <<: *backend
+    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
+    healthcheck:
+      test:
+        - CMD
+        - php
+        - -r
+        - "$$socket = @fsockopen('127.0.0.1', 8080); exit($$socket ? 0 : 1);"
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+
+  queue:
+    <<: *backend
+    command:
+      ["php", "artisan", "queue:work", "redis", "--sleep=3", "--tries=3", "--timeout=90", "--no-interaction"]
+    stop_grace_period: 2m
+
+  scheduler:
+    <<: *backend
+    command: ["php", "artisan", "schedule:work"]
+
+  nginx:
+    build:
+      context: ./deploy/nginx
+      dockerfile: Dockerfile
+    image: swm-nginx:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      frontend:
+        condition: service_healthy
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in the deployment environment}
+      API_DOMAIN: ${API_DOMAIN:?Set API_DOMAIN in the deployment environment}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot:ro
+      - type: bind
+        source: ${SWM_DATA_ROOT:-/data/swm}/public
+        target: /srv/swm/storage/app/public
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  certbot:
+    image: certbot/certbot:v4.2.0
+    entrypoint: ["/bin/sh", "/opt/swm/certbot-entrypoint.sh"]
+    restart: unless-stopped
+    depends_on:
+      nginx:
+        condition: service_started
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in the deployment environment}
+      API_DOMAIN: ${API_DOMAIN:?Set API_DOMAIN in the deployment environment}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in the deployment environment}
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot
+      - ./deploy/scripts/certbot-entrypoint.sh:/opt/swm/certbot-entrypoint.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "test -s /etc/letsencrypt/live/$$DOMAIN/fullchain.pem"]
+      interval: 30s
+      timeout: 5s
+      retries: 20
+      start_period: 2m
+
+volumes:
+  certbot-webroot:
+  letsencrypt:
+  redis-data:
+

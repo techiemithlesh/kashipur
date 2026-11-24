@@ -45,13 +45,9 @@ RUN mkdir -p \
         storage/framework/views \
         storage/logs \
         bootstrap/cache \
-        public/user \
-        public/driver \
-        public/Uploads \
-    && ln -s ../../storage/app/public/user/img public/user/img \
-    && ln -s ../../storage/app/public/user/signature public/user/signature \
-    && ln -s ../../storage/app/public/driver/img public/driver/img \
-    && ln -s ../../storage/app/public/Uploads/UlbOfficers public/Uploads/UlbOfficers \
+    && ln -s ../storage/app/public/user public/user \
+    && ln -s ../storage/app/public/driver public/driver \
+    && ln -s ../storage/app/public/Uploads public/Uploads \
     && ln -s ../storage/app/public/documents public/documents \
     && ln -s ../../storage/app/private/Uploads/SwmTranDeactivation public/Uploads/SwmTranDeactivation \
     && ln -s ../../storage/app/private/Uploads/SwmDeactivation public/Uploads/SwmDeactivation \
