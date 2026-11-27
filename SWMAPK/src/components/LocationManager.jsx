@@ -40,6 +40,7 @@ const LocationManager = ({
   refreshTrigger,
   processing,
   isShow=true,
+  showRefreshButton = true,
   ...rest
 }) => {
   const [status, setStatus] = useState('idle');
@@ -981,13 +982,15 @@ const LocationManager = ({
             </View>
           )}
 
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            disabled={isProcessing}
-            onPress={handleRetry}
-          >
-            <Text style={styles.secondaryButtonText}>🔄 Refresh Location</Text>
-          </TouchableOpacity>
+          {showRefreshButton && (
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              disabled={isProcessing}
+              onPress={handleRetry}
+            >
+              <Text style={styles.secondaryButtonText}>🔄 Refresh Location</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 

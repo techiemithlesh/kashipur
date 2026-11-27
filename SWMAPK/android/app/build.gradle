@@ -103,6 +103,13 @@ android {
             usesCleartextTraffic: envProperties.getProperty("USES_CLEARTEXT_TRAFFIC", "false")
         ]
     }
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            def suffix = variant.buildType.name == "release" ? "" : "-${variant.name}"
+            outputFileName = "NNK-${variant.versionName}${suffix}.apk"
+        }
+    }
+
     signingConfigs {
         debug {
             storeFile file('debug.keystore')

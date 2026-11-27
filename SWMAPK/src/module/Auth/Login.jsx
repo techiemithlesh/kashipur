@@ -63,6 +63,7 @@ function Login({ navigation }) {
       setLoading(false);
     }
   };
+  console.log("LOGIN_API",LOGIN_API);
 
   return (
     <KeyboardAvoidingView

@@ -7,6 +7,7 @@ import {
   Alert,
 } from 'react-native';
 import axios from 'axios';
+import Geolocation from '@react-native-community/geolocation';
 import { useNavigation } from '@react-navigation/native';
 import Layout from '../../layout/Layout'; // Your newly created Layout
 import { ConsumerFormStyles as styles } from '../../styles/ConsumerFormStyles';
@@ -159,9 +160,7 @@ const AddConsumer = () => {
     // ── Validation ────────────────────────────────────────────────────────────
     const validationErrors = {};
 
-    if (!formData.latitude || !formData.longitude) {
-      validationErrors.location = 'Please capture your location first.';
-    }
+
     if (!formData.categoryTypeMasterId) {
       validationErrors.categoryTypeMasterId = 'Consumer Category is required.';
     }
@@ -181,7 +180,30 @@ const AddConsumer = () => {
     // ── Submit ────────────────────────────────────────────────────────────────
     setUi(p => ({ ...p, loading: { ...p.loading, submit: true } }));
     try {
-      const res = await axios.post(swmAddConsumerApi, formData, {
+      let location;
+      try {
+        const { coords } = await new Promise((resolve, reject) => {
+          Geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            maximumAge: 0,
+            timeout: 30000,
+          });
+        });
+        const { latitude, longitude, accuracy } = coords;
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          throw new Error('Invalid location coordinates.');
+        }
+        location = { latitude, longitude, accuracy };
+      } catch {
+        Alert.alert(
+          'Location unavailable',
+          'Check that location is on and the app has permission, then tap Submit again.',
+        );
+        return;
+      }
+
+      const payload = { ...formData, ...location };
+      const res = await axios.post(swmAddConsumerApi, payload, {
         headers: { Authorization: `Bearer ${token}` },
       });
       console.log('Submit Response:', res);
@@ -261,6 +283,7 @@ const AddConsumer = () => {
         <LocationManager
           onLocationSelect={handleLocationSelect}
           isShow={true}
+          showRefreshButton={false}
         />
 
         {ui.errors.location && (
