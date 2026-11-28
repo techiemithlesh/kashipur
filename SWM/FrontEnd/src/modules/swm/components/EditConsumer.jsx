@@ -173,7 +173,9 @@ function EditConsumer({ id, onClose, onSuccess }) {
       if (formData?.categoryTypeMasterId && formData?.subCategoryTypeMasterId) {
         setRateLoading(true);
         try {
-          const response = await axios.post(swmReviewTaxApi, formData, {
+          // reviewTax also validates date_format:Y-m; the loaded record holds a full date.
+          const payload = { ...formData, dateOfEffective: toYearMonth(formData?.dateOfEffective) };
+          const response = await axios.post(swmReviewTaxApi, payload, {
             headers: { Authorization: `Bearer ${token}` },
           });
           if (response.data?.status) {
