@@ -77,4 +77,19 @@ export const toastMsg = (msg = "", type = "success", position = "top-right", dur
   }
 };
 
+/**
+ * Normalizes a date value to "YYYY-MM" for APIs that validate with date_format:Y-m.
+ * "2025-04-01", "2025-04-01 00:00:00", "2025-04-01T00:00:00Z" or "2025-04" -> "2025-04".
+ * ISO-like strings are sliced instead of parsed, so the month never shifts with the timezone.
+ */
+export const toYearMonth = (value) => {
+  if (!value) return "";
+  const match = /^(\d{4}-\d{2})/.exec(String(value));
+  if (match) return match[1];
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+};
+
 

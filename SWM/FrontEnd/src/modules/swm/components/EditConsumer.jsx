@@ -22,6 +22,7 @@ import {
   validateHoldingNoApi,
 } from "../../../api/endpoints";
 import { getToken, getWithExpiry, setWithExpiry } from "../../../utils/auth";
+import { toYearMonth } from "../../../utils/utils";
 
 function EditConsumer({ id, onClose, onSuccess }) {
   const token = getToken();
@@ -328,7 +329,8 @@ function EditConsumer({ id, onClose, onSuccess }) {
         categoryTypeMasterId:formData?.categoryTypeMasterId,
         subCategoryTypeMasterId:formData?.subCategoryTypeMasterId,
         hasCompostingMachineProvision:formData?.hasCompostingMachineProvision,
-        dateOfEffective:formData?.dateOfEffective,
+        // The API expects "YYYY-MM"; an untouched field still holds the full date from the consumer record.
+        dateOfEffective:toYearMonth(formData?.dateOfEffective),
         totalNoOfFlat:formData?.totalNoOfFlat,
         typeOfMultiStoreyBuilding:formData?.typeOfMultiStoreyBuilding,
         actualNoOfFlat:formData?.actualNoOfFlat,
