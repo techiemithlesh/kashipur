@@ -77,8 +77,9 @@ chown -R postgres "$work_dir"
 
 as_postgres() { sudo -u postgres "$@"; }
 # SQL is always passed on stdin: psql interpolates :'var' and :"var" there, never in -c.
-psql_db() { db=$1; shift; as_postgres psql -X -q -v ON_ERROR_STOP=1 -d "$db" "$@"; }
-query() { db=$1; shift; as_postgres psql -X -q -tA -v ON_ERROR_STOP=1 -d "$db" "$@"; }
+# POSIX sh has no local variables, so the helpers must not assign names used by callers.
+psql_db() { as_postgres psql -X -q -v ON_ERROR_STOP=1 -d "$@"; }
+query() { as_postgres psql -X -q -tA -v ON_ERROR_STOP=1 -d "$@"; }
 toc() { pg_restore -l "$1"; }
 
 for dump in "$work_dir/master.dump" "$work_dir/consumer.dump"; do
