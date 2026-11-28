@@ -98,9 +98,10 @@ function EditConsumer({ id, onClose, onSuccess }) {
                         ...item,
                         index, // add index for reference
                     })) || [],
-          categoryTypeMasterId:"",
-          subCategoryTypeMasterId:"",
-          hasCompostingMachineProvision:false,
+          // Prefill with the saved values so the form reflects the current record.
+          categoryTypeMasterId: consumer?.categoryTypeMasterId ?? "",
+          subCategoryTypeMasterId: consumer?.subCategoryTypeMasterId ?? "",
+          hasCompostingMachineProvision: consumer?.hasCompostingMachineProvision ?? false,
           dateOfEffective: consumer?.dateOfEffective || "",
         });
         fetchSubCategory(consumer?.categoryTypeMasterId);
