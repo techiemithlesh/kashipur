@@ -100,7 +100,7 @@ function EditConsumer({ id, onClose, onSuccess }) {
           categoryTypeMasterId:"",
           subCategoryTypeMasterId:"",
           hasCompostingMachineProvision:false,
-          dateOfEffective: "",
+          dateOfEffective: consumer?.dateOfEffective || "",
         });
         fetchSubCategory(consumer?.categoryTypeMasterId);
       }
@@ -498,7 +498,7 @@ function EditConsumer({ id, onClose, onSuccess }) {
             label: "Date Of Effect",
             type: "month",
             error: validationError?.dateOfEffective || "",
-            value: formatDateYearMonth(formData.dateOfEffective) || "",
+            value: formData.dateOfEffective ? formatDateYearMonth(formData.dateOfEffective) : "",
             required: true,
             min: masterData?.minDate,
             max: masterData?.maxDate,

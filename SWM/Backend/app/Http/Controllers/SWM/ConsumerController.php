@@ -341,12 +341,13 @@ class ConsumerController extends Controller
             if($validator->fails()){
                 return validationError($validator);
             }
+            $dateOfEffectiveMonth = $request->dateOfEffective;
             if ($request->dateOfEffective) {
                 $request->merge(["dateOfEffective"=>($request->dateOfEffective . "-01")]);
             }
             $this->begin();
             // old demand generate upto $request->dateOfEffective
-            if($lastDemand && ($request->dateOfEffective>Carbon::parse($lastDemand->demand_upto)->format("Y-m"))){
+            if($lastDemand && ($dateOfEffectiveMonth>Carbon::parse($lastDemand->demand_upto)->format("Y-m"))){
                 $newRequest = new Request($request->all());
                 $newRequest->merge(["id"=>$request->consumerId]);
                 $objDemandBll = new ConsumerDemandGenerateBll($newRequest);
