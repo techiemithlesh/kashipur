@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { FaPlus, FaTimes, FaTrash } from "react-icons/fa";
 import { motion } from "framer-motion";
@@ -24,6 +24,58 @@ import {
 import { getToken, getWithExpiry, setWithExpiry } from "../../../utils/auth";
 import { toYearMonth } from "../../../utils/utils";
 
+// -------------------- Section payloads --------------------
+// Each builder returns exactly what its API expects, normalised so that two snapshots of the
+// same data compare equal (API values arrive as numbers, inputs produce strings).
+const str = (v) => (v === null || v === undefined ? "" : String(v));
+
+const buildBasicPayload = (id, d) => ({
+  id,
+  wardMstrId: str(d?.wardMstrId),
+  holdingNo: str(d?.holdingNo),
+  houseNo: str(d?.houseNo),
+  address: str(d?.address),
+  landmark: str(d?.landmark),
+  ps: str(d?.ps),
+  streetName: str(d?.streetName),
+  locality: str(d?.locality),
+  pinCode: str(d?.pinCode),
+});
+
+const buildOwnerPayload = (id, d) => ({
+  consumerId: id,
+  ownerDtl: (d?.ownerDtl || []).map((o) => ({
+    id: o.id ?? null,
+    ownerName: str(o.ownerName),
+    guardianName: str(o.guardianName),
+    relationType: str(o.relationType),
+    mobileNo: str(o.mobileNo),
+    email: str(o.email),
+    lockStatus: Boolean(o.lockStatus),
+  })),
+});
+
+const buildRangePayload = (id, d) => ({
+  consumerId: id,
+  categoryTypeMasterId: str(d?.categoryTypeMasterId),
+  subCategoryTypeMasterId: str(d?.subCategoryTypeMasterId),
+  hasCompostingMachineProvision: Boolean(d?.hasCompostingMachineProvision),
+  // The API validates date_format:Y-m; the loaded record holds a full date.
+  dateOfEffective: toYearMonth(d?.dateOfEffective),
+  totalNoOfFlat: str(d?.totalNoOfFlat),
+  typeOfMultiStoreyBuilding: str(d?.typeOfMultiStoreyBuilding),
+  actualNoOfFlat: str(d?.actualNoOfFlat),
+});
+
+const isSame = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+// Area fields that trigger a tariff change (the date itself is handled separately).
+const AREA_KEYS = ["categoryTypeMasterId", "subCategoryTypeMasterId", "hasCompostingMachineProvision",
+  "totalNoOfFlat", "typeOfMultiStoreyBuilding", "actualNoOfFlat"];
+
+// A tariff change cannot start before the month of the last generated demand.
+const earliestEffectiveMonth = (d) => (d?.demandUpto ? toYearMonth(d.demandUpto) : "");
+
 function EditConsumer({ id, onClose, onSuccess }) {
   const token = getToken();
 
@@ -39,9 +91,9 @@ function EditConsumer({ id, onClose, onSuccess }) {
   const [submitResponse, setSubmitResponse] = useState({});
   const [validationError, setValidationError] = useState({});
   const [formData, setFormData] = useState({ ownerDtl: [] });
-  const [isBasicEditSubmit,setIsBasicEditSubmit] = useState(false);
-  const [isOwnerEditSubmit,setIsOwnerEditSubmit] = useState(false);
-  const [isRangeEditSubmit,setIsRangeEditSubmit] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  // Form state as last saved on the server; used to send only the sections that changed.
+  const savedRef = useRef(null);
 
   const relationTypeList = [
     { value: "S/O", label: "S/O" },
@@ -92,7 +144,7 @@ function EditConsumer({ id, onClose, onSuccess }) {
       );
       if (response?.data?.status) {
         const consumer = response?.data?.data || {};
-        setFormData({
+        const initial = {
           ...consumer,
           ownerDtl: consumer?.owners?.map((item, index) => ({
                         ...item,
@@ -103,7 +155,9 @@ function EditConsumer({ id, onClose, onSuccess }) {
           subCategoryTypeMasterId: consumer?.subCategoryTypeMasterId ?? "",
           hasCompostingMachineProvision: consumer?.hasCompostingMachineProvision ?? false,
           dateOfEffective: consumer?.dateOfEffective || "",
-        });
+        };
+        setFormData(initial);
+        savedRef.current = initial;
         fetchSubCategory(consumer?.categoryTypeMasterId);
       }
     } catch (error) {
@@ -200,10 +254,18 @@ function EditConsumer({ id, onClose, onSuccess }) {
   // -------------------- Change Handlers --------------------
   const handleChange = (name, value) => {
     setFormData((prev) => {
+      // Some inputs re-emit their current value (e.g. on mount); treat that as no change.
+      if (str(prev[name]) === str(value)) return prev;
       let updated = { ...prev, [name]: value };
       if (name === "categoryTypeMasterId") {
         updated = { ...updated, subCategoryTypeMasterId: "" };
         fetchSubCategory(value);
+      }
+      // Changing the tariff with the old effective date would be rejected by the API,
+      // so move the date to the earliest month that is still allowed.
+      const earliest = earliestEffectiveMonth(updated);
+      if (AREA_KEYS.includes(name) && earliest && toYearMonth(updated.dateOfEffective) < earliest) {
+        updated = { ...updated, dateOfEffective: earliest };
       }
       return updated;
     });
@@ -264,96 +326,76 @@ function EditConsumer({ id, onClose, onSuccess }) {
   };
 
   // -------------------- Submit --------------------
-  const handelBasicEdit = async (e) => {
+  // One Update for the whole modal: send only the sections that differ from the saved record,
+  // in order, and stop at the first failure so its errors can be shown next to the fields.
+  const handleUpdate = async (e) => {
     e.preventDefault();
-    setIsBasicEditSubmit(true);
-    const payload = {
-        id:id,
-        wardMstrId:formData?.wardMstrId,
-        holdingNo:formData?.holdingNo,
-        houseNo:formData?.houseNo,
-        address:formData?.address,
-        landmark:formData?.landmark,
-        ps:formData?.ps,
-        streetName:formData?.streetName,
-        locality:formData?.locality,
-        pinCode:formData?.pinCode,
-    }
-    try {
-      const response = await axios.post(swmEditBasicConsumerApi, payload, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+    const saved = savedRef.current || {};
+    const perms = formData?.userPermission || {};
+    const sections = [
+      {
+        name: "Connection Details",
+        allowed: perms.canAppEditBasic,
+        api: swmEditBasicConsumerApi,
+        build: (d) => buildBasicPayload(id, d),
+        keys: ["wardMstrId", "holdingNo", "houseNo", "address", "landmark", "ps", "streetName", "locality", "pinCode"],
+      },
+      {
+        name: "Owner Details",
+        allowed: perms.canAppEditOwner,
+        api: swmEditOwnerApi,
+        build: (d) => buildOwnerPayload(id, d),
+        keys: ["ownerDtl"],
+      },
+      {
+        name: "Area Details",
+        allowed: perms.canSwmEditCategory,
+        api: swmEditConsumerRangeApi,
+        build: (d) => buildRangePayload(id, d),
+        keys: ["categoryTypeMasterId", "subCategoryTypeMasterId", "hasCompostingMachineProvision",
+               "dateOfEffective", "totalNoOfFlat", "typeOfMultiStoreyBuilding", "actualNoOfFlat"],
+      },
+    ].filter((s) => s.allowed && !isSame(s.build(formData), s.build(saved)));
 
-      if (response.data?.status) {
-        toast.success(response?.data?.message);
-        onSuccess && onSuccess();
-      } else {
-        toast.error(response?.data?.message);
-        setValidationError(response?.data?.errors || {});
+    if (sections.length === 0) {
+      toast("No changes to update");
+      return;
+    }
+
+    // Check the date rule before sending anything, so no section is saved half-way.
+    const earliest = earliestEffectiveMonth(formData);
+    if (sections.some((s) => s.api === swmEditConsumerRangeApi) && earliest
+        && toYearMonth(formData?.dateOfEffective) < earliest) {
+      const message = `Date of Effect must be ${earliest} or later (last demand month).`;
+      setValidationError({ dateOfEffective: [message] });
+      toast.error(`Area Details: ${message}`);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setValidationError({});
+    try {
+      for (const section of sections) {
+        const response = await axios.post(section.api, section.build(formData), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.data?.status) {
+          toast.error(`${section.name}: ${response?.data?.message || "Update failed"}`);
+          setValidationError(response?.data?.errors || {});
+          return;
+        }
+        // Mark this section as saved so a retry after a later failure does not resend it.
+        const next = { ...savedRef.current };
+        section.keys.forEach((key) => { next[key] = formData[key]; });
+        savedRef.current = next;
       }
+      toast.success("Consumer updated successfully");
+      onSuccess && onSuccess();
     } catch (error) {
       console.error("Error submitting form:", error);
+      toast.error("Something went wrong while updating");
     } finally {
-      setIsBasicEditSubmit(false);
-    }
-  };
-
-  const handelOwnerEdit = async (e) => {
-    e.preventDefault();
-    setIsOwnerEditSubmit(true);
-    const payload = {
-        consumerId:id,
-        ownerDtl:formData?.ownerDtl
-    }
-    try {
-      const response = await axios.post(swmEditOwnerApi, payload, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.data?.status) {
-        toast.success(response?.data?.message);
-        onSuccess && onSuccess();
-      } else {
-        toast.error(response?.data?.message);
-        setValidationError(response?.data?.errors || {});
-      }
-    } catch (error) {
-      console.error("Error submitting form:", error);
-    } finally {
-      setIsOwnerEditSubmit(false);
-    }
-  };
-
-  const handelRangeEdit = async (e) => {
-    e.preventDefault();
-    setIsRangeEditSubmit(true);
-    const payload = {
-        consumerId:id,
-        categoryTypeMasterId:formData?.categoryTypeMasterId,
-        subCategoryTypeMasterId:formData?.subCategoryTypeMasterId,
-        hasCompostingMachineProvision:formData?.hasCompostingMachineProvision,
-        // The API expects "YYYY-MM"; an untouched field still holds the full date from the consumer record.
-        dateOfEffective:toYearMonth(formData?.dateOfEffective),
-        totalNoOfFlat:formData?.totalNoOfFlat,
-        typeOfMultiStoreyBuilding:formData?.typeOfMultiStoreyBuilding,
-        actualNoOfFlat:formData?.actualNoOfFlat,
-    }
-    try {
-      const response = await axios.post(swmEditConsumerRangeApi, payload, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.data?.status) {
-        toast.success(response?.data?.message);
-        onSuccess && onSuccess();
-      } else {
-        toast.error(response?.data?.message);
-        setValidationError(response?.data?.errors || {});
-      }
-    } catch (error) {
-      console.error("Error submitting form:", error);
-    } finally {
-      setIsRangeEditSubmit(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -505,7 +547,8 @@ function EditConsumer({ id, onClose, onSuccess }) {
             error: validationError?.dateOfEffective || "",
             value: formData.dateOfEffective ? formatDateYearMonth(formData.dateOfEffective) : "",
             required: true,
-            min: masterData?.minDate,
+            // The API rejects months before the last generated demand (after_or_equal demand_upto).
+            min: earliestEffectiveMonth(formData) || masterData?.minDate,
             max: masterData?.maxDate,
             placeholder: "Select Month & Year",
             isDisabled: (!(formData?.userPermission?.canSwmEditCategory || false)),
@@ -757,15 +800,6 @@ function EditConsumer({ id, onClose, onSuccess }) {
                     formFields={formFields1}
                     onChange={handleChange}
                     />
-                    <div className="flex justify-center mt-3">
-                        <button
-                            onClick={handelBasicEdit}
-                            disabled={(!(formData?.userPermission?.canAppEditBasic || false)) || isBasicEditSubmit}
-                            className={`rounded-full text-white px-6 py-2 ${((!(formData?.userPermission?.canAppEditBasic || false)) || isBasicEditSubmit) ? "  bg-gray-400 hover:bg-gray-500" : " bg-blue-600 hover:bg-blue-700"}`}
-                        >
-                            {isBasicEditSubmit ? "Updating..." : "Update"}
-                        </button>
-                    </div>
                 </div>
                 <div className="bg-gradient-to-br from-white via-blue-50 to-blue-100 shadow-sm p-4 border border-blue-300 rounded-xl">
                     <DetailsTable
@@ -774,15 +808,6 @@ function EditConsumer({ id, onClose, onSuccess }) {
                         data={formData.ownerDtl || []}
                         renderers={applicantRenderers}
                     />
-                    <div className="flex justify-center mt-3">
-                        <button
-                            onClick={handelOwnerEdit}
-                            disabled={(!(formData?.userPermission?.canAppEditOwner || false)) || isOwnerEditSubmit}
-                            className={`rounded-full text-white px-6 py-2 ${((!(formData?.userPermission?.canAppEditOwner || false)) || isOwnerEditSubmit) ? "  bg-gray-400 hover:bg-gray-500" : " bg-blue-600 hover:bg-blue-700"}`}
-                        >
-                            {isOwnerEditSubmit ? "Updating..." : "Update"}
-                        </button>
-                    </div>
                 </div>
                 <div className="bg-gradient-to-br from-white via-blue-50 to-blue-100 shadow-sm p-4 border border-blue-300 rounded-xl">
                     <FormCard
@@ -806,16 +831,25 @@ function EditConsumer({ id, onClose, onSuccess }) {
                             )
                         }
                     </div>
-                    <div className="flex justify-center mt-3">
-                        <button
-                            onClick={handelRangeEdit}
-                            disabled={(!(formData?.userPermission?.canSwmEditCategory || false)) || isRangeEditSubmit}
-                            className={`rounded-full text-white px-6 py-2 ${((!(formData?.userPermission?.canSwmEditCategory || false)) || isRangeEditSubmit) ? "  bg-gray-400 hover:bg-gray-500" : " bg-blue-600 hover:bg-blue-700"}`}
-                        >
-                            {isRangeEditSubmit ? "Updating..." : "Update"}
-                        </button>
-                    </div>
                 </div>
+            </div>
+            <div className="flex justify-center gap-3 pt-4 border-t">
+                <button
+                    type="button"
+                    onClick={onClose}
+                    disabled={isSubmitting}
+                    className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-full text-gray-800"
+                >
+                    Cancel
+                </button>
+                <button
+                    type="button"
+                    onClick={handleUpdate}
+                    disabled={isSubmitting || !(formData?.userPermission?.canAppEditBasic || formData?.userPermission?.canAppEditOwner || formData?.userPermission?.canSwmEditCategory)}
+                    className={`rounded-full text-white px-6 py-2 ${isSubmitting ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"}`}
+                >
+                    {isSubmitting ? "Updating..." : "Update"}
+                </button>
             </div>
 
         </motion.div>
