@@ -512,7 +512,7 @@ function EditConsumer({ id, onClose, onSuccess }) {
             label: "Has Provision of Own Composting Machine",
             type: "radio",
             error: validationError?.hasCompostingMachineProvision || "",
-            value: formData.hasCompostingMachineProvision || "",
+            value: formData.hasCompostingMachineProvision ?? "",
             required: true,
             options: [
                 { label: "Yes", value: true },
@@ -760,7 +760,7 @@ function EditConsumer({ id, onClose, onSuccess }) {
                             disabled={(!(formData?.userPermission?.canAppEditBasic || false)) || isBasicEditSubmit}
                             className={`rounded-full text-white px-6 py-2 ${((!(formData?.userPermission?.canAppEditBasic || false)) || isBasicEditSubmit) ? "  bg-gray-400 hover:bg-gray-500" : " bg-blue-600 hover:bg-blue-700"}`}
                         >
-                            {isBasicEditSubmit ? "Submitting..." : "Edit"}
+                            {isBasicEditSubmit ? "Updating..." : "Update"}
                         </button>
                     </div>
                 </div>
@@ -777,7 +777,7 @@ function EditConsumer({ id, onClose, onSuccess }) {
                             disabled={(!(formData?.userPermission?.canAppEditOwner || false)) || isOwnerEditSubmit}
                             className={`rounded-full text-white px-6 py-2 ${((!(formData?.userPermission?.canAppEditOwner || false)) || isOwnerEditSubmit) ? "  bg-gray-400 hover:bg-gray-500" : " bg-blue-600 hover:bg-blue-700"}`}
                         >
-                            {isOwnerEditSubmit ? "Submitting..." : "Edit"}
+                            {isOwnerEditSubmit ? "Updating..." : "Update"}
                         </button>
                     </div>
                 </div>
@@ -809,7 +809,7 @@ function EditConsumer({ id, onClose, onSuccess }) {
                             disabled={(!(formData?.userPermission?.canSwmEditCategory || false)) || isRangeEditSubmit}
                             className={`rounded-full text-white px-6 py-2 ${((!(formData?.userPermission?.canSwmEditCategory || false)) || isRangeEditSubmit) ? "  bg-gray-400 hover:bg-gray-500" : " bg-blue-600 hover:bg-blue-700"}`}
                         >
-                            {isRangeEditSubmit ? "Submitting..." : "Edit"}
+                            {isRangeEditSubmit ? "Updating..." : "Update"}
                         </button>
                     </div>
                 </div>

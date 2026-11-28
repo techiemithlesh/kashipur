@@ -378,7 +378,10 @@ function ConsumerDetails() {
               <EditConsumer
                 id={id}
                 onClose={() => setIsEditModalOpen(false)}
-                onSuccess={fetchDetails}
+                onSuccess={() => {
+                  setIsEditModalOpen(false);
+                  fetchDetails();
+                }}
               />
             )}
 

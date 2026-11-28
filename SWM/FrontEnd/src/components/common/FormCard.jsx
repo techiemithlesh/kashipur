@@ -173,12 +173,13 @@ export default function FormCard({
                           type="radio"
                           name={name}
                           value={opt.value}
-                          checked={value == opt.value}
-                          onChange={(e) => {
-                            onChange(name, e.target.value);
-                            
+                          checked={String(value) === String(opt.value)}
+                          onChange={() => {
+                            // Pass the option's own value: e.target.value is always a string ("true"/"false").
+                            onChange(name, opt.value);
+
                             if (typeof subOnChange === "function") {
-                              subOnChange(selectedValue);
+                              subOnChange(opt.value);
                             }
                           }}
                           disabled={isDisabled}

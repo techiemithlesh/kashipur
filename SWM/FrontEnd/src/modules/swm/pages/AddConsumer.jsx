@@ -523,7 +523,7 @@ function AddConsumer({ mstrData, formDetails }) {
             label: "Has Provision of Own Composting Machine",
             type: "radio",
             error: validationError?.hasCompostingMachineProvision || "",
-            value: formData.hasCompostingMachineProvision || "",
+            value: formData.hasCompostingMachineProvision ?? "",
             required: true,
             options: [
                 { label: "Yes", value: true },
